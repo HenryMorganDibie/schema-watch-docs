@@ -1,0 +1,75 @@
+---
+title: Local dashboard API
+description: Script around detected contract changes with the read API that schema-watch start serves on the dashboard port.
+lastVerified: "2026-10-20"
+---
+
+`schema-watch start` serves a small JSON API next to the dashboard, at
+`http://localhost:4561/api` by default. The dashboard itself is built on it, so
+anything you can see there you can also read from a script.
+
+The API runs on your machine, needs no authentication, and only exposes what
+the local proxy has captured. If you changed `apiPort` in
+`schema-watch.config.json`, use that port instead of 4561.
+
+## Check that it is running
+
+```bash
+curl http://localhost:4561/api/health
+```
+
+```json
+{"ok":true}
+```
+
+## List what has broken
+
+```bash
+curl -s http://localhost:4561/api/changes
+```
+
+Each change records the endpoint, whether the request or the response
+changed, every field-level difference with its severity, and the frontend files
+that reference the endpoint:
+
+```json
+[
+  {
+    "id": "388e088d-cd62-4d38-bbec-3eaaa3c60b0a",
+    "endpointId": "5cd306a4-890b-484d-8711-0983e689cd0f",
+    "method": "GET",
+    "pathPattern": "/api/users/:id",
+    "severity": "BREAKING",
+    "target": "response",
+    "changes": [
+      { "kind": "type-changed", "path": "id", "severity": "BREAKING", "before": "string", "after": "number" },
+      { "kind": "field-removed", "path": "email", "severity": "BREAKING", "before": "string" }
+    ],
+    "affectedFiles": ["web/src/user.js"],
+    "acknowledged": false,
+    "createdAt": "2026-10-20T09:49:48.444Z"
+  }
+]
+```
+
+## Example: list unacknowledged breaking changes
+
+```bash
+curl -s http://localhost:4561/api/changes \
+  | jq -r '.[] | select(.severity == "BREAKING" and (.acknowledged | not))
+           | "\(.method) \(.pathPattern): \([.changes[].path] | join(", "))"'
+```
+
+```text
+GET /api/users/:id: id, email
+```
+
+## Severity levels
+
+| Severity | Meaning |
+| --- | --- |
+| `BREAKING` | Existing callers are likely to fail, for example a removed field or a changed type. |
+| `WARNING` | Callers may need attention. |
+| `INFO` | Safe for existing callers, for example a field added to a response. |
+
+Browse every operation, with schemas and examples, in the sidebar.

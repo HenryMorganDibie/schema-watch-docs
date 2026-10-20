@@ -53,11 +53,80 @@
       ]
     },
     {
+      "tab": "API Reference",
+      "groups": [
+        {
+          "group": "Overview",
+          "pages": [
+            "api/introduction"
+          ]
+        }
+      ],
+      "api": {
+        "source": "openapi.yaml",
+        "tagsOrder": [
+          "Changes",
+          "Endpoints",
+          "Health"
+        ]
+      }
+    },
+    {
       "tab": "Changelog",
       "href": "/changelog"
     }
   ],
   "ai": {
     "chat": true
+  },
+  "readiness": {
+    "topK": 5,
+    "goldenQuestions": [
+      {
+        "question": "How do I start the Schema-Watch proxy in front of my API?",
+        "expect": [
+          "/quickstart"
+        ]
+      },
+      {
+        "question": "How do I fail a pull request when an API response changes shape?",
+        "expect": [
+          "/guides/ci-contract-check"
+        ]
+      },
+      {
+        "question": "What does schema-watch check exit code 2 mean?",
+        "expect": [
+          "/reference/cli",
+          "/quickstart"
+        ]
+      },
+      {
+        "question": "How do I accept an intentional breaking change and update the baseline?",
+        "expect": [
+          "/guides/ci-contract-check"
+        ]
+      },
+      {
+        "question": "How do I see which frontend files break when an endpoint changes?",
+        "expect": [
+          "/quickstart",
+          "/guides/ci-contract-check"
+        ]
+      },
+      {
+        "question": "What kinds of contract changes does Schema-Watch detect?",
+        "expect": [
+          "/",
+          "/introduction"
+        ]
+      },
+      {
+        "question": "How do I list detected changes from a script?",
+        "expect": [
+          "/api/introduction"
+        ]
+      }
+    ]
   }
 }

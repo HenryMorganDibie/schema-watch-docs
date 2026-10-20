@@ -2,6 +2,7 @@
 title: Introduction
 description: Schema-Watch catches breaking API contract changes before they reach your frontend, locally and in CI.
 mode: home
+lastVerified: "2026-10-20"
 ---
 
 <Hero
@@ -53,7 +54,7 @@ Breaking API contract changes detected.
 | Nullability changed | `user: object → null` | Breaking |
 | Optional field became required | request body now needs `currency` | Breaking for requests |
 | Array item shape changed | `items[].price` changed type | Breaking |
-| Field added | `items[].archived` added to a response | Safe |
+| Field added | `items[].archived` added to a response | Info (safe) |
 
 Severity depends on direction. A newly required field breaks a **request**
 body, because existing callers do not send it, but is harmless in a
@@ -79,8 +80,14 @@ body, because existing callers do not send it, but is harmless in a
   <Card title="CLI reference" icon="terminal" href="/reference/cli">
     Every command and flag, with exit codes.
   </Card>
+  <Card title="Local dashboard API" icon="code" href="/api/introduction">
+    Read detected changes from scripts through the API behind the dashboard.
+  </Card>
   <Card title="Source on GitHub" icon="github" href="https://github.com/HenryMorganDibie/schema-watch">
     The detection engine, CLI, and dashboard are open source under Apache-2.0.
+  </Card>
+  <Card title="Use these docs from AI tools" icon="robot" href="/llms.txt">
+    Every page is also published as Markdown and JSON, indexed in `llms.txt`.
   </Card>
 </CardGroup>
 
