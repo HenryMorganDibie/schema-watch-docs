@@ -1,0 +1,49 @@
+---
+title: API overview
+navTitle: Overview
+description: What this API reference covers and how to try every request live.
+---
+
+This reference documents the Sample Posts API — a small, working API backed by
+the public [JSONPlaceholder](https://jsonplaceholder.typicode.com) service.
+Every endpoint page has a **Send** button that runs the real request from your
+browser, so you can inspect live responses before writing a line of code.
+
+## Base URL
+
+All requests use the same base URL:
+
+```text
+https://jsonplaceholder.typicode.com
+```
+
+## Try your first request
+
+<Steps>
+  <Step title="Open an endpoint">
+    Pick **Get a post** from the Posts group in the sidebar.
+  </Step>
+  <Step title="Send it">
+    Keep the default id of `1` and press **Send**. The response panel shows a
+    real `200` with the post body.
+  </Step>
+  <Step title="Change the input">
+    Try an id above `100` to see the API's `404` behavior.
+  </Step>
+</Steps>
+
+Writes are safe to experiment with: the demo server accepts `POST` requests
+and echoes the created resource back with a generated id without storing it.
+
+## Make this reference yours
+
+This sample exists so the reference has something real to show. To document
+your own API, replace `openapi.yaml` at the repository root with your
+specification — the endpoint pages, navigation, and playground regenerate from
+it on the next publish.
+
+<Note type="info" title="Keep the overview pages">
+  Readers orient faster when a reference opens with what the API does, how to
+  authenticate, and one runnable request. Rewrite this page and
+  [Authentication](/api/authentication) for your API instead of deleting them.
+</Note>

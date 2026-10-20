@@ -1,0 +1,105 @@
+import { siteConfig } from '@/data/site'
+import { getSiteUrl } from '@/lib/site-url'
+
+/**
+ * Version of the social-preview image URL. X caches link-preview images per
+ * image URL, including failed fetches, and re-crawling the page does not
+ * refresh them. Bump this to give every page a new image URL when previews
+ * need to be fetched again. The OG route ignores the value.
+ */
+const OG_IMAGE_URL_VERSION = '2'
+
+/**
+ * Build a URL string for the dynamic OG image endpoint.
+ * All parameters are optional. The route handler fills in defaults from siteConfig.
+ */
+export function buildOgImageUrl(params: {
+  title?: string
+  description?: string
+  crumb?: string
+  url?: string
+  theme?: 'light' | 'dark'
+}): string {
+  const searchParams = new URLSearchParams()
+  if (params.title) searchParams.set('title', params.title)
+  if (params.description) searchParams.set('description', params.description)
+  if (params.crumb) searchParams.set('crumb', params.crumb)
+  if (params.url) searchParams.set('url', params.url)
+  if (params.theme) searchParams.set('theme', params.theme)
+  searchParams.set('v', OG_IMAGE_URL_VERSION)
+
+  const query = searchParams.toString()
+  return `/api/og${query ? `?${query}` : ''}`
+}
+
+/**
+ * Format a canonical path for the compact URL slot in a social preview.
+ */
+export function formatOgDisplayUrl(path = '/', siteUrl = getSiteUrl()): string {
+  const url = new URL(path, siteUrl)
+  return `${url.host}${url.pathname === '/' ? '' : url.pathname}`
+}
+
+/**
+ * Turn page navigation into the two-level breadcrumb used by the docs preview.
+ */
+export function formatOgBreadcrumb(
+  breadcrumb: Array<{ label: string }>,
+  title: string,
+  fallback = 'Documentation',
+): string {
+  const labels = breadcrumb
+    .map((item) => item.label.trim())
+    .filter((label) => label && label.toLocaleLowerCase() !== title.trim().toLocaleLowerCase())
+
+  return labels.slice(-2).join(' / ') || fallback
+}
+
+/**
+ * Resolve the brand values used by the handoff-aligned docs preview.
+ */
+export function resolveOgConfig(
+  theme: 'light' | 'dark',
+  accentOverride?: string,
+  identity: { name: string } = siteConfig,
+  requestOrigin?: string,
+) {
+  const og = siteConfig.ogImage ?? {}
+  const palette =
+    theme === 'dark'
+      ? {
+          background: '#131A14',
+          foreground: '#F5F6EC',
+          muted: '#ABB2A2',
+          faint: '#7C8375',
+          leaf: '#FFFFFF',
+        }
+      : {
+          background: '#FBFBF3',
+          foreground: '#252B22',
+          muted: '#6C7268',
+          faint: '#8B9188',
+          leaf: '#41794F',
+        }
+
+  const accent = accentOverride && /^#[0-9a-fA-F]{3,8}$/.test(accentOverride) ? accentOverride : undefined
+  const siteUrl = requestOrigin ?? getSiteUrl()
+  let domain = og.domain ?? ''
+  if (!domain && siteUrl) {
+    try {
+      domain = new URL(siteUrl).hostname
+    } catch {
+      domain = siteUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+    }
+  }
+
+  return {
+    background: og.backgroundStart ?? palette.background,
+    foreground: og.titleColor ?? palette.foreground,
+    muted: og.descriptionColor ?? palette.muted,
+    faint: og.groupColor ?? palette.faint,
+    leaf: theme === 'light' ? (accent ?? og.accent ?? palette.leaf) : palette.leaf,
+    domain: domain || identity.name.toLowerCase(),
+    logoText: og.logoText ?? identity.name,
+  }
+}

@@ -1,0 +1,146 @@
+openapi: 3.1.0
+info:
+  title: Sample Posts API
+  version: 1.0.0
+  description: >-
+    A working sample backed by the public JSONPlaceholder service, so every
+    request in this reference returns a live response you can inspect. Replace
+    this file with the OpenAPI specification for the API your readers use.
+servers:
+  - url: https://jsonplaceholder.typicode.com
+    description: Live demo server
+tags:
+  - name: Posts
+    description: Create and read example posts.
+  - name: Users
+    description: Look up the example authors behind each post.
+paths:
+  /posts:
+    get:
+      operationId: listPosts
+      tags: [Posts]
+      summary: List posts
+      description: Return every post. Real APIs would paginate a list this size.
+      responses:
+        '200':
+          description: All posts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Post'
+    post:
+      operationId: createPost
+      tags: [Posts]
+      summary: Create a post
+      description: >-
+        Create a post and receive it back with a generated id. The demo server
+        accepts the write and echoes the result without storing it, so you can
+        try requests freely.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: Hello from the API playground
+                body:
+                  type: string
+                  example: This request runs against a live server.
+                userId:
+                  type: integer
+                  example: 1
+              required: [title, body, userId]
+      responses:
+        '201':
+          description: The created post, including its generated id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+  /posts/{id}:
+    get:
+      operationId: getPost
+      tags: [Posts]
+      summary: Get a post
+      description: Return one post by id. Ids 1–100 exist on the demo server.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The post id.
+          schema:
+            type: integer
+            minimum: 1
+            example: 1
+      responses:
+        '200':
+          description: The requested post.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '404':
+          description: No post has this id.
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [Users]
+      summary: Get a user
+      description: Return the profile of an example author. Ids 1–10 exist.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The user id.
+          schema:
+            type: integer
+            minimum: 1
+            example: 1
+      responses:
+        '200':
+          description: The requested user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: No user has this id.
+components:
+  schemas:
+    Post:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        userId:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: Hello from the API playground
+        body:
+          type: string
+          example: This request runs against a live server.
+      required: [id, userId, title, body]
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Leanne Graham
+        username:
+          type: string
+          example: Bret
+        email:
+          type: string
+          example: Sincere@april.biz
+      required: [id, name, username, email]

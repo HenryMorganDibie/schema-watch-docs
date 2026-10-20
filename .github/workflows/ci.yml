@@ -1,0 +1,152 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: Exact base commit for an automated framework update PR
+        required: true
+        type: string
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # Dispatched candidate code may only run under its own update-branch cache
+    # scope. Default-branch dispatch must never execute unreviewed dependencies.
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      (startsWith(github.ref, 'refs/heads/automation/thally-framework-') &&
+       github.ref != format('refs/heads/{0}', github.event.repository.default_branch))
+    name: Test · Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Plan validation from changed paths
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.base_sha }}
+        run: node .github/scripts/plan-managed-ci.mjs "$BASE_SHA"
+
+      - name: Read pinned runtime provenance
+        id: runtime
+        if: steps.plan.outputs.full == 'true'
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const manifest = require("./starter-release.json");
+          if (!/^[0-9a-f]{40}$/.test(manifest.runtime?.commitSha)) {
+            throw new Error("starter-release.json has an invalid runtime commit.");
+          }
+          fs.appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `sha=${manifest.runtime.commitSha}\n`,
+          );
+          NODE
+
+      - name: Checkout pinned Thally runtime
+        if: steps.plan.outputs.full == 'true'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: thallylabs/thally
+          ref: ${{ steps.runtime.outputs.sha }}
+          path: runtime-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove runtime revision is on protected main
+        if: steps.plan.outputs.full == 'true'
+        env:
+          RUNTIME_SHA: ${{ steps.runtime.outputs.sha }}
+        run: |
+          git -C runtime-source fetch --no-tags origin main
+          test "$(git -C runtime-source rev-parse HEAD)" = "$RUNTIME_SHA"
+          git -C runtime-source merge-base --is-ancestor "$RUNTIME_SHA" origin/main
+
+      - name: Verify generated runtime snapshot
+        if: steps.plan.outputs.full == 'true'
+        run: >-
+          node runtime-source/.github/scripts/starter-runtime-contract.mjs check
+          --starter-dir .
+          --runtime-dir runtime-source
+
+      # The protected runtime checkout is verification input, not part of the
+      # standalone app. Remove it before Next.js scans the workspace for types.
+      - name: Remove runtime checkout
+        if: steps.plan.outputs.full == 'true'
+        run: >-
+          node -e "require('node:fs').rmSync('runtime-source',
+          { recursive: true, force: true })"
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          # Wrangler 4.111+ requires Node 22 for the exact dry-run package gate.
+          node-version: 22
+
+      # Do not enable setup-node's shared dependency cache here. Pull requests
+      # execute repository-controlled install, test, and build commands; letting
+      # those runs save a cache that a trusted main-branch job may later restore
+      # creates a cross-trust cache-poisoning path.
+
+      - name: Install pinned content tooling
+        run: npm ci --ignore-scripts --prefix .github/thally-tooling
+
+      - name: Check authored content
+        run: .github/thally-tooling/node_modules/.bin/thally check --ci .
+
+      - name: Install dependencies
+        if: steps.plan.outputs.full == 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Test release automation contracts
+        if: steps.plan.outputs.full == 'true'
+        run: node --test .github/scripts/*.test.mjs
+
+      - name: Qualify installed customer navigation tooling
+        if: steps.plan.outputs.full == 'true'
+        run: node .github/scripts/verify-installed-navigation.mjs
+
+      - name: Test
+        if: steps.plan.outputs.full == 'true'
+        run: npm test
+
+      - name: Build managed runtime and content assets
+        if: steps.plan.outputs.full == 'true'
+        run: npm run build:cloudflare
+        env:
+          # Managed releases keep customer-authored content in immutable
+          # static assets so the executable Worker stays constant-size as the
+          # documentation set grows. Self-hosted builds leave this unset and
+          # retain the filesystem/embedded default.
+          THALLY_CONTENT_SOURCE: assets
+          # Keep the build deterministic and offline — embeddings fall back to the
+          # local hash provider when no key is present.
+          THALLY_SITE_URL: https://example.com
+
+      - name: Verify managed content artifact
+        if: steps.plan.outputs.full == 'true'
+        run: node .github/scripts/verify-managed-content-assets.mjs
+
+      - name: Smoke generated Worker routes
+        # Both PR events and explicit update-branch dispatches run without
+        # deployment credentials or a shared dependency cache.
+        if: steps.plan.outputs.full == 'true' && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+        run: npm run smoke:cloudflare
+        env:
+          THALLY_CONTENT_SOURCE: assets

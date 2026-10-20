@@ -1,0 +1,53 @@
+---
+title: Authentication
+description: How to authenticate requests, and how to document your own scheme.
+---
+
+The Sample Posts API is intentionally public: no key, token, or header is
+required, so every request in this reference works the moment you press
+**Send**.
+
+Your API almost certainly is not public. This page shows how to document the
+two most common schemes so readers always know exactly what to put in the
+request — replace it with the scheme your API uses.
+
+## Documenting a bearer token
+
+Show the header exactly as readers must send it, then where the token comes
+from:
+
+```bash
+curl --request GET \
+  --url 'https://api.yourproduct.com/v1/posts' \
+  --header 'Authorization: Bearer YOUR_API_TOKEN'
+```
+
+## Documenting an API key
+
+```bash
+curl --request GET \
+  --url 'https://api.yourproduct.com/v1/posts' \
+  --header 'X-Api-Key: YOUR_API_KEY'
+```
+
+## Declare the scheme in OpenAPI
+
+Add a security scheme to `openapi.yaml` and the generated endpoint pages will
+show the requirement — and the playground will prompt for the credential —
+automatically:
+
+```yaml
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+security:
+  - bearerAuth: []
+```
+
+<Tip>
+  Tell readers where to create and revoke credentials, how long they live, and
+  what happens when one expires. Those three answers prevent most
+  authentication support tickets.
+</Tip>

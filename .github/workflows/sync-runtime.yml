@@ -1,0 +1,193 @@
+name: Sync Thally runtime
+
+run-name: >-
+  Sync runtime ${{ inputs.runtime_ref }}${{ inputs.request_id && format(' · {0}', inputs.request_id) || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      runtime_ref:
+        description: Runtime main or an exact commit on main to snapshot
+        required: true
+        default: main
+        type: string
+      auto_merge:
+        description: Merge the generated PR after CI succeeds
+        required: false
+        default: false
+        type: boolean
+      request_id:
+        description: Release-controller correlation id
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-thally-runtime
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Generate starter snapshot
+    # Snapshot generation belongs to the canonical template. Customer copies
+    # must use promoted releases through the ownership-aware site updater.
+    if: github.repository == 'thallylabs/starter'
+    runs-on: ubuntu-latest
+    environment: release-control
+    steps:
+      - name: Mint the destination PR token
+        id: pr-bot
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_COORDINATOR_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_COORDINATOR_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: starter
+          permission-actions: read
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout starter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.pr-bot.outputs.token }}
+          persist-credentials: false
+
+      - name: Checkout Thally runtime
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: thallylabs/thally
+          ref: ${{ inputs.runtime_ref }}
+          path: runtime-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve protected runtime revision
+        id: runtime
+        shell: bash
+        env:
+          RUNTIME_REF: ${{ inputs.runtime_ref }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          if [[ -n "$REQUEST_ID" && ! "$REQUEST_ID" =~ ^[a-zA-Z0-9._-]{1,80}$ ]]; then
+            echo "::error::request_id must contain only letters, numbers, dots, underscores, or hyphens."
+            exit 1
+          fi
+          if [[ "$RUNTIME_REF" != "main" && ! "$RUNTIME_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Automated runtime selections must be main or a full lowercase commit SHA."
+            exit 1
+          fi
+          git -C runtime-source fetch origin main --depth=1
+          runtime_sha="$(git -C runtime-source rev-parse HEAD)"
+          git -C runtime-source merge-base --is-ancestor "$runtime_sha" origin/main
+          echo "sha=$runtime_sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${runtime_sha:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate runtime snapshot
+        run: >-
+          node runtime-source/.github/scripts/starter-runtime-contract.mjs sync
+          --starter-dir .
+          --runtime-dir runtime-source
+
+      - name: Remove runtime checkout
+        run: >-
+          node -e "require('node:fs').rmSync('runtime-source',
+          { recursive: true, force: true })"
+
+      - name: Open synchronization pull request
+        id: pull-request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.pr-bot.outputs.token }}
+          RUNTIME_SHA: ${{ steps.runtime.outputs.sha }}
+          SHORT_SHA: ${{ steps.runtime.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          base_sha="$(git rev-parse HEAD)"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "Starter already matches runtime $RUNTIME_SHA."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          branch="automation/runtime-${SHORT_SHA}"
+          git config user.name "thally-release-bot"
+          git config user.email "release-bot@thally.app"
+          gh auth setup-git
+          git checkout -B "$branch"
+          git add --all
+          git commit -m "chore: sync Thally runtime ${SHORT_SHA}"
+          git push --force-with-lease origin "$branch"
+
+          if pr_json="$(gh pr view "$branch" --json number,url,headRefOid 2>/dev/null)"; then
+            pr_url="$(jq -r .url <<<"$pr_json")"
+            pr_number="$(jq -r .number <<<"$pr_json")"
+          else
+            pr_url="$(gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "chore: sync Thally runtime ${SHORT_SHA}" \
+              --body "Generate the standalone starter runtime snapshot from thallylabs/thally@${RUNTIME_SHA}. Runtime-owned files and provenance are verified byte-for-byte by CI.")"
+            pr_number="$(gh pr view "$branch" --json number --jq .number)"
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "url=$pr_url" >> "$GITHUB_OUTPUT"
+          echo "$pr_url"
+
+      # The full-release controller is the operator's release authorization.
+      # This workflow still waits for the destination repository's own CI and
+      # matches the checked head SHA at merge time, so automation cannot merge
+      # unverified or subsequently changed bytes.
+      - name: Merge after CI succeeds
+        if: >-
+          inputs.auto_merge &&
+          github.actor == vars.RELEASE_COORDINATOR_ACTOR &&
+          steps.pull-request.outputs.changed == 'true'
+        shell: bash
+        env:
+          EXPECTED_BASE_SHA: ${{ steps.pull-request.outputs.base_sha }}
+          GH_TOKEN: ${{ steps.pr-bot.outputs.token }}
+          PR_NUMBER: ${{ steps.pull-request.outputs.number }}
+        run: |
+          set -euo pipefail
+          pr_identity="$(gh pr view "$PR_NUMBER" --json baseRefOid,headRefOid)"
+          base_sha="$(jq -r .baseRefOid <<<"$pr_identity")"
+          head_sha="$(jq -r .headRefOid <<<"$pr_identity")"
+          if [[ "$base_sha" != "$EXPECTED_BASE_SHA" ]]; then
+            echo "::error::Starter main advanced before CI was bound to the synchronization PR."
+            exit 1
+          fi
+          run_id=""
+          for attempt in {1..60}; do
+            run_id="$(
+              gh run list \
+                --workflow ci.yml \
+                --event pull_request \
+                --limit 50 \
+                --json databaseId,headSha \
+                --jq ".[] | select(.headSha == \"$head_sha\") | .databaseId" \
+                | head -n 1
+            )"
+            [[ -n "$run_id" ]] && break
+            sleep 5
+          done
+          if [[ -z "$run_id" ]]; then
+            echo "::error::CI did not start for pull request #$PR_NUMBER."
+            exit 1
+          fi
+          gh run watch "$run_id" --exit-status
+          current_base="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          final_base="$(gh pr view "$PR_NUMBER" --json baseRefOid --jq .baseRefOid)"
+          if [[ "$current_base" != "$EXPECTED_BASE_SHA" || "$final_base" != "$EXPECTED_BASE_SHA" ]]; then
+            echo "::error::main advanced after CI; rerun synchronization against the new base."
+            exit 1
+          fi
+          gh pr merge "$PR_NUMBER" \
+            --squash \
+            --delete-branch \
+            --match-head-commit "$head_sha"

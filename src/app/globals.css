@@ -1,0 +1,394 @@
+@import '../styles/brand.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   Structural theme CSS variables
+   Set via `"theme"` in docs.json — applied as `data-theme` on <html>.
+   Available: default | maple | sharp | minimal
+
+   Variables control border radius, sidebar active indicator, and nav tab
+   appearance. These are independent of brand colors and dark/light mode.
+   ============================================================================ */
+
+:root {
+  /* Border radius scale */
+  --theme-radius-sm:                 0.375rem;  /* badges, chips */
+  --theme-radius-md:                 0.5rem;    /* sidebar items, small controls */
+  --theme-radius-lg:                 1rem;      /* cards, panels */
+  --theme-radius-xl:                 1.5rem;    /* large panels, hero sections */
+
+  /* Buttons / CTAs / inputs — brand rounded-rect by default (Thally buttons
+     are 0.5rem, not pills); squared further by sharp/minimal */
+  --theme-control-radius:            0.5rem;
+
+  /* Badges / chips / capsules — pills by default per the brand; squared by
+     sharp/minimal alongside the control radius */
+  --theme-badge-radius:              9999px;
+
+  /* Sidebar active item */
+  --theme-sidebar-item-radius:       0.5rem;
+  --theme-sidebar-indicator-opacity: 1;         /* left accent bar */
+
+  /* Nav tab strip — defaults match the Tailwind classes used by TopBar */
+  --theme-nav-bar-bg:                hsl(var(--thally-muted) / 0.2);
+  --theme-nav-bar-border-color:      hsl(var(--thally-border) / 0.5);
+  --theme-nav-bar-radius:            1rem;      /* outer container */
+  --theme-nav-tab-radius:            1rem;      /* individual tab */
+  --theme-nav-tab-indicator-opacity: 1;         /* accent underline on active tab */
+}
+/* Per-theme overrides are injected as a <style> tag in layout.tsx so they
+   are SSR'd directly in the HTML and take effect without relying on CSS
+   attribute-selector matching or Tailwind JIT class regeneration. */
+
+:root {
+  --thally-background: var(--brand-light-background, 60 45% 98%);
+  --thally-card: var(--brand-light-card, 0 0% 100%);
+  --thally-foreground: var(--brand-light-foreground, 105 14% 11%);
+  --thally-muted: var(--brand-light-muted, 60 16% 93%);
+  --thally-muted-foreground: var(--brand-light-muted-foreground, 108 4% 46%);
+  --thally-border: var(--brand-light-border, 72 9% 89%);
+  --thally-accent: var(--brand-light-accent, 161 100% 24%);
+  --thally-accent-foreground: var(--brand-light-accent-foreground, 0 0% 100%);
+  --thally-accent-2: var(--brand-light-accent-2, 254 40% 55%);
+  --thally-accent-2-foreground: var(--brand-light-accent-2-foreground, 247 31% 6%);
+  --thally-input: var(--brand-light-input, 72 9% 89%);
+  --thally-sidebar: var(--brand-light-sidebar, 60 26% 96%);
+  /* Primary (solid CTAs/buttons) — ink in light mode, per the brand: "primary
+     is the dark foreground itself". Accent stays for links/active states.
+     Overridable per site via --brand-light-primary[-foreground]. */
+  --thally-primary: var(--brand-light-primary, var(--thally-foreground));
+  --thally-primary-foreground: var(--brand-light-primary-foreground, var(--thally-background));
+  --thally-ring: var(--brand-light-ring, 155 33% 33%);
+  /* Headings share the reading face by default. A site can still supply a
+     dedicated heading family through docs.json. */
+  --font-heading: var(--font-sans);
+  --container-lg: 33rem;
+  --shiki-color-text: #f8fafc;
+  --shiki-token-property: #7dd3fc;
+  --shiki-token-constant: #fbbf24;
+  --shiki-token-string: #86efac;
+  --shiki-token-comment: #94a3b8;
+  --shiki-token-keyword: #c4b5fd;
+  --shiki-token-parameter: #f9a8d4;
+  --shiki-token-function: #fde68a;
+  --shiki-token-string-expression: #86efac;
+  --shiki-token-punctuation: #cbd5e1;
+  --sidebar-active-bg: var(--brand-sidebar-active-bg-light, 68 40% 88% / 0.65);
+  --sidebar-active-text: var(--brand-sidebar-active-text-light, 66 37% 21%);
+  /* Ensure prose variables track the active foreground */
+  --tw-prose-headings: hsl(var(--thally-foreground));
+}
+
+.dark {
+  --thally-background: var(--brand-dark-background, 120 27% 2%);
+  --thally-card: var(--brand-dark-card, 120 20% 3%);
+  --thally-foreground: var(--brand-dark-foreground, 60 20% 92%);
+  --thally-muted: var(--brand-dark-muted, 132 15% 6%);
+  --thally-muted-foreground: var(--brand-dark-muted-foreground, 110 6% 59%);
+  --thally-border: var(--brand-dark-border, 120 5% 11%);
+  --thally-accent: var(--brand-dark-accent, 75 75% 57%);
+  --thally-accent-foreground: var(--brand-dark-accent-foreground, 127 22% 8%);
+  --thally-accent-2: var(--brand-dark-accent-2, 251 74% 78%);
+  --thally-accent-2-foreground: var(--brand-dark-accent-2-foreground, 247 31% 6%);
+  --thally-input: var(--brand-dark-input, 129 8% 17%);
+  --thally-sidebar: var(--brand-dark-sidebar, 120 20% 3%);
+  /* Dark primary flips to the bright accent (lime), matching the site */
+  --thally-primary: var(--brand-dark-primary, var(--thally-accent));
+  --thally-primary-foreground: var(--brand-dark-primary-foreground, var(--thally-accent-foreground));
+  --thally-ring: var(--brand-dark-ring, 75 75% 57%);
+  --sidebar-active-bg: var(--brand-sidebar-active-bg-dark, 132 15% 6%);
+  --sidebar-active-text: var(--brand-sidebar-active-text-dark, 75 75% 57%);
+  --tw-prose-headings: hsl(var(--thally-foreground));
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  letter-spacing: normal;
+}
+
+/* Text selection — an olive-family wash in light (the leaf's own green),
+   a lime tint in dark; text keeps its own color for readability. */
+::selection {
+  background: hsl(68 45% 82%);
+}
+.dark ::selection {
+  background: hsl(75 81% 66% / 0.28);
+}
+
+/* Suppress the default browser focus halo when focus arrives from a pointer
+   (click/tap) — this is the ugly periwinkle ring that appeared around the
+   sidebar logo and other controls after clicking. Keyboard focus
+   (:focus-visible) keeps its outline so the site stays accessible. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+[inert] ::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth scrolling for overflow containers */
+/* Ensure prose headings follow the active foreground instead of legacy mint */
+.prose :where(h1, h2, h3, h4) {
+  color: var(--tw-prose-headings) !important;
+}
+.dark .prose :where(h1, h2, h3, h4) {
+  color: var(--tw-prose-headings) !important;
+}
+
+/* Steps component — hide connector line on last step */
+.thally-steps > .thally-step:last-of-type > .thally-step-line {
+  display: none;
+}
+
+/* Code blocks — highlighted lines (```ts {2,4-6}). The span stretches across
+   the panel by cancelling the pre's 1rem horizontal padding. */
+.thally-line-highlight {
+  display: inline-block;
+  width: calc(100% + 2rem);
+  margin: 0 -1rem;
+  padding: 0 1rem;
+  background-color: hsl(var(--thally-accent) / 0.12);
+  box-shadow: inset 2px 0 0 hsl(var(--thally-accent));
+}
+
+/* Code blocks — diff markers, focus dimming, and line numbers. */
+.thally-line-add,
+.thally-line-remove {
+  display: inline-block;
+  width: calc(100% + 2rem);
+  margin: 0 -1rem;
+  padding: 0 1rem;
+}
+.thally-line-add {
+  background-color: hsl(142 70% 45% / 0.14);
+  box-shadow: inset 2px 0 0 hsl(142 70% 40%);
+}
+.thally-line-remove {
+  background-color: hsl(0 80% 55% / 0.14);
+  box-shadow: inset 2px 0 0 hsl(0 70% 50%);
+}
+.thally-line-dim {
+  opacity: 0.4;
+}
+.thally-code-lines code {
+  counter-reset: thally-line;
+}
+/* remark-rehype ends every fence with a newline, which Shiki renders as a
+   trailing empty line span. Do not number that artefact. */
+.thally-code-lines code > span:last-child:empty::before {
+  content: none;
+}
+.thally-code-lines code > span::before {
+  counter-increment: thally-line;
+  content: counter(thally-line);
+  display: inline-block;
+  min-width: calc(var(--thally-line-digits, 2) * 1ch);
+  margin-right: 1.25rem;
+  text-align: right;
+  color: hsl(var(--thally-muted-foreground, 0 0% 50%));
+  opacity: 0.6;
+  user-select: none;
+}
+
+/* Non-wrapping fences with tinted lines: stretch the block to the longest line
+   so the tint spans the full scroll width, not just the visible width. */
+pre:not(.whitespace-pre-wrap) code:has(> .thally-line-add, > .thally-line-remove, > .thally-line-highlight) {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* `lines` + `wrap`: hang wrapped continuation lines past the gutter. The
+   gutter is number width plus its margin; the negative indent pulls only the
+   first line (which holds the number) back to the edge. */
+.thally-code-hang code > span {
+  --thally-gutter: calc(var(--thally-line-digits, 2) * 1ch + 1.25rem);
+  display: inline-block;
+  box-sizing: border-box;
+  width: 100%;
+  padding-left: var(--thally-gutter);
+  text-indent: calc(-1 * var(--thally-gutter));
+}
+.thally-code-hang code > span.thally-line-highlight,
+.thally-code-hang code > span.thally-line-add,
+.thally-code-hang code > span.thally-line-remove {
+  width: calc(100% + 2rem);
+  padding-left: calc(1rem + var(--thally-gutter));
+  padding-right: 1rem;
+}
+.thally-code-hang code > span::before {
+  text-indent: 0;
+}
+
+/* Collapsed `expandable` fences: fade the bottom edge so clipped code reads as
+   continuing. Theme-independent (alpha mask, no colours). */
+.thally-code-collapsed {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 2rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2rem), transparent);
+}
+
+/* Diff lines also carry a +/- glyph so the state is not colour-only (WCAG
+   1.4.1). It is absolutely positioned inside the line's own 1rem left padding
+   (which overlays the pre's 18px padding), so it never shifts code, never
+   meets a `lines` number (those start at 1rem), and is not selectable. */
+.thally-line-add,
+.thally-line-remove {
+  position: relative;
+}
+.thally-line-add::after,
+.thally-line-remove::after {
+  position: absolute;
+  top: 0;
+  left: 0.3rem;
+  width: 0.6rem;
+  text-indent: 0;
+  font-weight: 700;
+  line-height: inherit;
+  user-select: none;
+  pointer-events: none;
+}
+.thally-line-add::after {
+  content: '+';
+  content: '+' / '';
+  color: hsl(142 70% 35%);
+}
+.thally-line-remove::after {
+  content: '\2212';
+  content: '\2212' / '';
+  color: hsl(0 70% 45%);
+}
+.dark .thally-line-add::after {
+  color: hsl(142 70% 60%);
+}
+.dark .thally-line-remove::after {
+  color: hsl(0 85% 68%);
+}
+
+/* Print: expandable fences print in full and the toggle is hidden. */
+@media print {
+  .thally-code-collapsed {
+    max-height: none !important;
+    overflow: visible !important;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .thally-code-toggle {
+    display: none;
+  }
+}
+
+@layer utilities {
+  .overflow-touch {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ============================================================================
+   SITE BANNER — Ink bar with brand-accent highlights (matches the
+   Thally dark surface; the accent dot/underline pick up the brand accent)
+   ============================================================================ */
+.thally-ink-banner {
+  position: relative;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  padding: 0.625rem 1rem;
+  background: var(--thally-banner-light, hsl(var(--brand-dark-background, 120 27% 2%)));
+  color: #efefe9;
+}
+.dark .thally-ink-banner {
+  background: var(--thally-banner-dark, var(--thally-banner-light, hsl(var(--brand-dark-background, 120 27% 2%))));
+}
+.thally-ink-banner[data-variant='warning'] {
+  --thally-banner-light: #78350f;
+  --thally-banner-dark: #451a03;
+}
+.thally-ink-banner[data-variant='critical'] {
+  --thally-banner-light: #881337;
+  --thally-banner-dark: #4c0519;
+}
+.thally-ink-banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  width: 100%;
+  max-width: 72rem;
+  text-align: center;
+}
+.thally-ink-banner-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  /* Always the dark-theme accent: the banner bar is dark in both themes */
+  background: hsl(var(--brand-dark-accent, 75 81% 66%));
+}
+.thally-ink-banner-content {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #efefe9;
+}
+.thally-ink-banner-content a {
+  color: #efefe9;
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--brand-dark-accent, 75 81% 66%));
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  transition: opacity 0.15s ease;
+}
+.thally-ink-banner-content a:hover {
+  opacity: 0.85;
+}
+.thally-ink-banner-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.25rem;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.375rem;
+  color: rgba(239, 239, 233, 0.55);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.thally-ink-banner-dismiss:hover {
+  color: #efefe9;
+  background: rgba(255, 255, 255, 0.08);
+}
+@media (max-width: 640px) {
+  .thally-ink-banner-inner {
+    align-items: flex-start;
+    text-align: left;
+  }
+  .thally-ink-banner-dot {
+    margin-top: 0.4rem;
+  }
+}
+
+/* Better text rendering on mobile */
+@media (max-width: 640px) {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+}

@@ -1,0 +1,24 @@
+'use client'
+
+import { Moon, Sun } from 'lucide-react'
+import { useReaderTheme } from '@/components/theme/reader-theme'
+import { Button } from '@/components/ui/button'
+
+export function ThemeSwitch() {
+  const { resolvedTheme, setTheme, showToggle } = useReaderTheme()
+  const isDark = resolvedTheme === 'dark'
+  if (!showToggle) return null
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-9 w-9 rounded-[10px] border-0 text-foreground/70 hover:bg-muted hover:text-foreground"
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      aria-label="Toggle theme"
+    >
+      <Sun className="thally-theme-sun h-4 w-4" aria-hidden="true" />
+      <Moon className="thally-theme-moon h-4 w-4" aria-hidden="true" />
+    </Button>
+  )
+}

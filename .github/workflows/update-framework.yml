@@ -1,0 +1,126 @@
+# Customer updates use published releases and the shared ownership-aware updater.
+# Canonical snapshot generation is restricted to thallylabs/starter.
+name: Update Thally framework
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Tuesday 03:43 UTC: check published releases without merging customer PRs.
+    - cron: '43 3 * * 2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-thally-framework
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository != 'thallylabs/starter' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Checkout customer repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+
+      # Installing outside the checkout avoids changing customer dependencies.
+      # No customer scripts or release-coordinator credentials run in this job.
+      - name: Install published updater
+        run: npm install --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/thally-update-tooling" @thallylabs/cli@latest
+
+      - name: Apply complete ownership-aware update
+        id: update
+        shell: bash
+        run: |
+          set -euo pipefail
+          updater="$RUNNER_TEMP/thally-update-tooling/node_modules/.bin/thally"
+          # Older CLIs may ignore unknown flags. Verify the published capability
+          # before any apply, rather than allowing an incomplete package update.
+          "$updater" starter update --help > "$RUNNER_TEMP/thally-update-help.txt"
+          if ! grep -q -- '--require-complete' "$RUNNER_TEMP/thally-update-help.txt"; then
+            echo "::error::The published updater does not yet support complete framework and package updates. Retry after the compatible CLI release is published."
+            exit 1
+          fi
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          "$updater" starter update --apply --require-complete
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const hash = crypto.createHash('sha256').update(fs.readFileSync('starter-release.json')).digest('hex');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `manifest_hash=${hash}\n`);
+          NODE
+
+      - name: Open framework update pull request
+        if: steps.update.outputs.changed == 'true'
+        id: pull-request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.THALLY_AGENT_TOKEN || github.token }}
+          HAS_AGENT_TOKEN: ${{ secrets.THALLY_AGENT_TOKEN != '' }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          BASE_SHA: ${{ steps.update.outputs.base_sha }}
+          MANIFEST_HASH: ${{ steps.update.outputs.manifest_hash }}
+        run: |
+          set -euo pipefail
+          branch="automation/thally-framework-${MANIFEST_HASH:0:12}-${BASE_SHA:0:12}"
+          gh auth setup-git
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null 2>&1; then
+            if existing_pr="$(gh pr view "$branch" --json url,state,baseRefName,headRefName 2>/dev/null)" &&
+              jq -e --arg base "$BASE_BRANCH" --arg head "$branch" \
+                '.state == "OPEN" and .baseRefName == $base and .headRefName == $head' \
+                <<< "$existing_pr" > /dev/null; then
+              pr_url="$(jq -r .url <<< "$existing_pr")"
+              echo "Existing framework update pull request: $pr_url"
+              echo "The same framework update is already open: $pr_url" >> "$GITHUB_STEP_SUMMARY"
+              echo "needs_dispatch=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::The update branch exists without a matching open pull request. Resolve the collision before retrying; this workflow never overwrites a branch."
+            exit 1
+          fi
+          current_base="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BASE_BRANCH" --jq .sha)"
+          if [[ "$current_base" != "$BASE_SHA" ]]; then
+            echo "::error::The source branch advanced during planning. Rerun the update against its current head."
+            exit 1
+          fi
+          git checkout -b "$branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          git commit -m 'chore: update Thally framework'
+          git push origin "HEAD:refs/heads/$branch"
+          cat > "$RUNNER_TEMP/thally-update-pr.md" <<'BODY'
+          Update the framework and package inputs to a published Thally scaffold release using the ownership-aware updater. Customer content and configuration are preserved; conflicting changes stop the update before any repository commit.
+
+          Review the update and its CI result before merging.
+          BODY
+          gh pr create --base "$BASE_BRANCH" --head "$branch" --title 'chore: update Thally framework' --body-file "$RUNNER_TEMP/thally-update-pr.md"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "needs_dispatch=$([[ "$HAS_AGENT_TOKEN" == "true" ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+      # GITHUB_TOKEN-created PRs do not trigger pull_request workflows. Explicit
+      # dispatch runs the same secret-free validation on the generated branch.
+      - name: Run update pull request validation
+        if: steps.pull-request.outputs.needs_dispatch == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE_BRANCH: ${{ steps.pull-request.outputs.branch }}
+          BASE_SHA: ${{ steps.update.outputs.base_sha }}
+        run: gh workflow run ci.yml --ref "$UPDATE_BRANCH" -f "base_sha=$BASE_SHA"

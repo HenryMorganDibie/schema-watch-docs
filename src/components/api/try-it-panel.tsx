@@ -1,0 +1,251 @@
+'use client'
+
+import { useState } from 'react'
+import { Loader2 } from 'lucide-react'
+import { useApiLabels } from '@/components/api/api-locale'
+import { BodyForm } from '@/components/api/body-form'
+import { isFormEditable } from '@/lib/openapi/body-form'
+import { MANUAL_NO_SERVER, type TryItController } from '@/components/api/use-try-it-controller'
+import { CopyButton } from '@/components/api/copy-button'
+import { isSendableScheme } from '@/lib/openapi/auth'
+import { cn } from '@/lib/utils'
+
+interface TryItPanelProps {
+  controller: TryItController
+  variant?: 'inline' | 'dialog'
+  showHeading?: boolean
+}
+
+export function TryItPanel({ controller, variant = 'inline', showHeading = true }: TryItPanelProps) {
+  const t = useApiLabels()
+  const { operation, serverUrl, setServerUrl, pathParams, queryParams, headerParams, authValues, setAuthValue, setParamValue, preparedRequest, isSending, canSendBody, response } =
+    controller
+  const containerStyles =
+    variant === 'dialog'
+      ? 'space-y-4'
+      : 'space-y-4 rounded-[11px] border border-border bg-background p-4'
+
+  const heading = (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-foreground/60">{t('tryIt')}</p>
+        <p className="text-sm text-foreground/70">Execute this endpoint with prefilled parameters.</p>
+      </div>
+      {operation.servers.length > 1 ? (
+        <select
+          aria-label={t('apiServer')}
+          value={serverUrl}
+          onChange={(event) => setServerUrl(event.target.value)}
+          className="rounded-[9px] border border-border bg-background px-3 py-1 text-sm"
+        >
+          {operation.servers.map((server) => (
+            <option key={server.url} value={server.url}>
+              {server.url}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
+  )
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    controller.requestSend()
+  }
+
+  return (
+    <section className={cn(containerStyles, variant === 'inline' && 'mt-6')} id={variant === 'inline' ? 'try-it' : undefined}>
+      {showHeading ? heading : null}
+      <form className="space-y-6" onSubmit={handleSubmit}>
+        {operation.authSchemes.filter(isSendableScheme).length ? (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-foreground/60">{t('authorization')}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {operation.authSchemes.filter(isSendableScheme).map((scheme) => (
+                <label key={scheme.name} className="space-y-1 text-sm text-foreground/70">
+                  <span className="font-mono text-xs uppercase text-foreground/60">{scheme.paramName}</span>
+                  <span className="flex items-center gap-2">
+                    {scheme.kind === 'apiKey' ? null : (
+                      <span className="rounded-[9px] border border-border px-2 py-2 text-xs">{scheme.kind === 'bearer' ? 'Bearer' : 'Basic'}</span>
+                    )}
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={authValues[scheme.name] ?? ''}
+                      onChange={(event) => setAuthValue(scheme.name, event.target.value)}
+                      placeholder={scheme.kind === 'basic' ? 'username:password' : scheme.kind === 'bearer' ? t('bearerPlaceholder') : t('keyPlaceholder')}
+                      className="w-full rounded-[9px] border border-border bg-background px-3 py-2 text-sm"
+                    />
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {operation.authSchemes.some((scheme) => !isSendableScheme(scheme)) ? (
+          <p role="note" className="text-xs text-foreground/60">
+            {operation.authSchemes.filter((scheme) => !isSendableScheme(scheme)).map((scheme) => `${scheme.paramName} (${scheme.in})`).join(', ')} is not sent from the playground, so this request goes out without it. Copy the code sample to send it.
+          </p>
+        ) : null}
+        <ParamGroup title={t('pathParameters')} values={pathParams} onChange={(key, value) => setParamValue('path', key, value)} />
+        <ParamGroup title={t('queryParameters')} values={queryParams} onChange={(key, value) => setParamValue('query', key, value)} />
+        <ParamGroup title={t('headers')} values={headerParams} onChange={(key, value) => setParamValue('header', key, value)} />
+        {canSendBody ? <BodySection controller={controller} /> : null}
+        {variant === 'inline' ? (
+          <div className="flex flex-col items-end gap-2">
+            {!preparedRequest.isServerConfigured ? (
+              <p className="text-xs text-amber-400">{operation.manualPage ? MANUAL_NO_SERVER : 'Add a server URL to the OpenAPI spec to enable live requests.'}</p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={isSending || !preparedRequest.isServerConfigured}
+              className="flex items-center gap-2 rounded-[9px] bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition hover:brightness-125 disabled:opacity-60"
+            >
+              {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t('send')}
+            </button>
+          </div>
+        ) : null}
+      </form>
+      {variant === 'dialog' ? (response && 'error' in response ? <TryItResponse response={response} /> : null) : <TryItResponse response={response} />}
+    </section>
+  )
+}
+
+/** The request body: a typed form from the schema, with a raw JSON editor kept in step with it. */
+function BodySection({ controller }: { controller: TryItController }) {
+  const t = useApiLabels()
+  const { operation, bodyValue, setBodyValue, setFile } = controller
+  const schema = operation.requestBody?.contents[0]?.schema
+  const editable = isFormEditable(schema)
+  const [raw, setRaw] = useState(!editable)
+  let parsed: unknown
+  try {
+    parsed = bodyValue.trim() ? JSON.parse(bodyValue) : {}
+  } catch {
+    parsed = undefined
+  }
+  const showForm = editable && !raw && parsed !== undefined && schema !== undefined
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-foreground/60">
+        <p>{t('requestBody')}</p>
+        {editable ? (
+          <button
+            type="button"
+            aria-pressed={raw}
+            disabled={raw && parsed === undefined}
+            onClick={() => setRaw(!raw)}
+            className="rounded-[7px] border border-border px-2 py-1 text-[10px] tracking-normal disabled:opacity-40"
+          >
+            JSON
+          </button>
+        ) : null}
+      </div>
+      {showForm ? (
+        <BodyForm schema={schema} value={parsed} onChange={(next) => setBodyValue(JSON.stringify(next, null, 2))} onFile={setFile} />
+      ) : (
+        <textarea
+          aria-label="JSON request body"
+          aria-invalid={parsed === undefined && Boolean(bodyValue.trim())}
+          value={bodyValue}
+          onChange={(event) => setBodyValue(event.target.value)}
+          className="min-h-[180px] w-full rounded-[9px] border border-border bg-background px-4 py-3 font-mono text-sm text-foreground"
+        />
+      )}
+    </div>
+  )
+}
+
+/** A labelled group of text inputs; a group with no fields is not shown at all. */
+function ParamGroup({ title, values, onChange }: { title: string; values: Record<string, string>; onChange: (key: string, value: string) => void }) {
+  const entries = Object.entries(values ?? {})
+  if (!entries.length) return null
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-foreground/60">{title}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {entries.map(([key, value]) => (
+          <label key={key} className="space-y-1 text-sm text-foreground/70">
+            <span className="font-mono text-xs uppercase text-foreground/60">{key}</span>
+            <input
+              value={value}
+              onChange={(event) => onChange(key, event.target.value)}
+              className="w-full rounded-[9px] border border-border bg-background px-3 py-2 text-sm"
+            />
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function TryItResponse({ response }: { response: TryItController['response'] }) {
+  const t = useApiLabels()
+  if (!response) {
+    return (
+      <div aria-live="polite" className="rounded-[11px] border border-dashed border-border p-4 text-sm text-foreground/60">
+        {t('sendToPreview')}
+      </div>
+    )
+  }
+
+  if ('error' in response) {
+    return (
+      <div role="alert" className="rounded-2xl border border-rose-500/40 bg-rose-500/5 p-4 text-sm text-rose-500">
+        {response.error}
+      </div>
+    )
+  }
+
+  return (
+    <div aria-live="polite" className="space-y-3 rounded-[11px] border border-border bg-background p-4">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <StatusPill status={response.status} statusText={response.statusText} />
+        <span className="text-xs text-foreground/60">{response.duration} ms</span>
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-foreground/50">{t('body')}</p>
+        <ResponseBody body={response.body} />
+      </div>
+    </div>
+  )
+}
+
+function StatusPill({ status, statusText }: { status: number; statusText: string }) {
+  const intent = status >= 200 && status < 300 ? 'success' : status >= 400 ? 'error' : 'info'
+  const styles =
+    intent === 'success'
+      ? 'text-accent'
+      : intent === 'error'
+        ? 'text-rose-400'
+        : 'text-amber-400'
+  return (
+    <span className={cn('inline-flex items-center gap-2 text-xs font-semibold before:h-1.5 before:w-1.5 before:rounded-full before:bg-current', styles)}>
+      {status}
+      <span className="text-foreground/70">{statusText}</span>
+    </span>
+  )
+}
+
+function formatBody(body: string) {
+  try {
+    const parsed = JSON.parse(body)
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return body
+  }
+}
+
+export function ResponseBody({ body }: { body: string }) {
+  return (
+    <pre className="scrollbar-hide relative max-h-[320px] overflow-auto rounded-xl border border-border/40 bg-background/70 p-4 text-xs leading-relaxed text-foreground/80">
+      <CopyButton
+        value={body}
+        className="absolute right-3 top-3 flex items-center gap-1 rounded-md border border-border/40 bg-background/80 px-1.5 py-1 text-[11px] text-foreground/60 transition hover:text-foreground"
+      />
+      {formatBody(body)}
+    </pre>
+  )
+}

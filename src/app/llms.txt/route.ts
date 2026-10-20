@@ -1,0 +1,132 @@
+import { loadSidebarCollections, loadDocEntries } from '@/data/docs'
+import { siteUrlMismatch } from '@/lib/site-url'
+import { resolveSiteConfig } from '@/lib/site-config'
+import { findChangelogPages } from '@/lib/changelog'
+import { getReaderAuthConfig } from '@/lib/reader-auth/config'
+import { canReaderAccessUnmarkedContent } from '@/lib/reader-auth/access'
+import { getReaderContextFromRequest } from '@/lib/reader-auth/context'
+import { contentCacheControl } from '@/lib/reader-auth/cache'
+
+export async function GET(request: Request) {
+  const baseUrl = new URL(request.url).origin
+  const effectiveSite = await resolveSiteConfig(baseUrl)
+  // The index lists exactly what this reader may open (anonymous by default).
+  const reader = await getReaderContextFromRequest(request)
+  const entries = await loadDocEntries(reader)
+  const entriesByHref = new Map(entries.map((entry) => [entry.href, entry]))
+  const collections = await loadSidebarCollections(undefined, reader)
+  // Changelog feeds are anonymous projections: advertise them only when an
+  // anonymous reader can see a changelog page.
+  const hasChangelog = (await findChangelogPages()).length > 0
+
+  const lines: Array<string> = []
+
+  // Header
+  lines.push(`# ${effectiveSite.name}`)
+  lines.push('')
+  lines.push(`> ${effectiveSite.description}`)
+  lines.push('')
+
+  // Links
+  lines.push(`- Documentation: ${baseUrl}`)
+  if (effectiveSite.repoUrl && !effectiveSite.repoUrl.includes('your-org')) {
+    lines.push(`- GitHub: ${effectiveSite.repoUrl}`)
+  }
+  lines.push(`- Full docs for LLMs: ${baseUrl}/llms-full.txt`)
+  lines.push(`- Agent discovery (ai.txt): ${baseUrl}/ai.txt`)
+  lines.push(`- Structured docs index (JSON): ${baseUrl}/api/docs-index`)
+  lines.push(`- OpenAPI spec: ${baseUrl}/openapi.yaml`)
+  lines.push('')
+  lines.push('## For AI agents')
+  lines.push('')
+  lines.push('Every page supports content negotiation on its human URL:')
+  lines.push(`- JSON API: append \`?format=json\` or send \`Accept: application/json\``)
+  lines.push(`- JSON-LD: append \`?format=ldjson\` or send \`Accept: application/ld+json\``)
+  lines.push(`- Markdown: append \`?format=md\` or send \`Accept: text/markdown\``)
+  lines.push(`- Per-page API: ${baseUrl}/api/docs/{page-id}`)
+  lines.push(`- Search API: ${baseUrl}/api/search?q={query}`)
+  lines.push(`- Capability manifest (skill): ${baseUrl}/skill.md`)
+  lines.push(`- Agent guidance (editing these docs): ${baseUrl}/AGENTS.md`)
+  lines.push(`- MCP server (attach docs as native tools): ${baseUrl}/api/mcp`)
+  lines.push(`- Agent readiness: ${baseUrl}/api/agent-readiness`)
+  if (hasChangelog) {
+    lines.push(`- Changelog feed (JSON Feed): ${baseUrl}/changelog/feed.json`)
+    lines.push(`- Changelog feed (RSS): ${baseUrl}/changelog/rss.xml`)
+  }
+  lines.push('')
+  lines.push('### Recommended workflow')
+  lines.push('')
+  lines.push('1. Use this index, the search API, or `search_sections` / `search_docs` before choosing a page.')
+  lines.push('2. Read the smallest set of relevant pages and follow their prerequisite links.')
+  lines.push('3. Treat the published docs as the source of truth. Label inferences and say when evidence is missing.')
+  lines.push('4. Cite the canonical human page URLs, not only API endpoints.')
+  lines.push('5. Use `/AGENTS.md` before editing a repository. The public MCP server is read-only.')
+  lines.push('')
+
+  // Sections grouped by tab > group. API tabs may mix generated operations
+  // with authored MDX overviews; only the latter belong in this page corpus.
+  const emittedCollections = new Set<string>()
+  for (const collection of collections) {
+    const standaloneHref = collection.sections.length === 0 && collection.href?.startsWith('/') && !collection.href.startsWith('//')
+      ? entriesByHref.get(collection.href)
+      : undefined
+    const sections = collection.sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => entriesByHref.has(item.href)),
+      }))
+      .filter((section) => section.items.length > 0)
+    if (!standaloneHref && sections.length === 0) continue
+
+    lines.push(`## ${collection.label}`)
+    lines.push('')
+    emittedCollections.add(collection.id)
+
+    if (standaloneHref) {
+      lines.push(`- [${standaloneHref.title}](${baseUrl}${standaloneHref.href})${standaloneHref.description ? `: ${standaloneHref.description}` : ''}`)
+      lines.push('')
+    }
+
+    for (const section of sections) {
+      if (section.title) {
+        lines.push(`### ${section.title}`)
+        lines.push('')
+      }
+
+      for (const item of section.items) {
+        const entry = entriesByHref.get(item.href)
+        const desc = entry?.description || item.description || ''
+        const url = `${baseUrl}${item.href}`
+        lines.push(`- [${item.title}](${url})${desc ? `: ${desc}` : ''}`)
+      }
+      lines.push('')
+    }
+  }
+
+  // Optional: API reference mention
+  const apiCollection = canReaderAccessUnmarkedContent(reader, getReaderAuthConfig())
+    ? collections.find((c) => c.api)
+    : undefined
+  if (apiCollection) {
+    if (!emittedCollections.has(apiCollection.id)) {
+      lines.push(`## ${apiCollection.label}`)
+      lines.push('')
+    }
+    lines.push(`Interactive API reference available at ${baseUrl}/api`)
+    lines.push('')
+  }
+
+  const body = lines.join('\n')
+
+  // Surface a stale-THALLY_SITE_URL misconfiguration (all links above would be
+  // dead): warns in server logs and flags it on the response for tooling.
+  const mismatch = siteUrlMismatch(baseUrl)
+
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': contentCacheControl('public, max-age=3600, s-maxage=3600'),
+      ...(mismatch ? { 'X-Thally-Site-Url-Warning': mismatch } : {}),
+    },
+  })
+}

@@ -1,0 +1,70 @@
+---
+title: Create and publish a site
+navTitle: Create a site
+description: Three ways to go from nothing to a published Thally site, and how publishing works after that.
+---
+
+This guide covers the site you are reading right now: how it was created, how
+changes reach readers, and how to start the next one. Keep it while your team
+learns the workflow, then replace this Guides tab with guides for your own
+product.
+
+## Choose how to start
+
+<Tabs>
+  <Tab title="Thally Cloud">
+    The fastest path. In [Thally Cloud](https://app.thally.io), press
+    **Create a site**, name it, and let the wizard create the GitHub
+    repository from the maintained template. The first version is live on
+    your `*.thally.app` address in about a minute.
+  </Tab>
+  <Tab title="CLI">
+    Scaffold locally when you want to explore before publishing:
+
+    ```bash
+    npm create thally-docs@latest my-docs
+    ```
+
+    Run it with `thally dev`, then connect the repository to Thally Cloud
+    later — or deploy it yourself with `thally deploy`.
+  </Tab>
+  <Tab title="Migrate an existing site">
+    Already have docs on another platform? Convert them in place:
+
+    ```bash
+    npx @thallylabs/cli migrate https://github.com/your-org/your-docs
+    ```
+
+    The migrator converts Mintlify and Docusaurus projects and keeps your
+    page URLs.
+  </Tab>
+</Tabs>
+
+## Publish a change
+
+On a Cloud-connected site, publishing is a git push:
+
+<Steps>
+  <Step title="Edit content">
+    Change any page under `src/content/`, or add one with
+    `thally new <page-id>`.
+  </Step>
+  <Step title="Push to the default branch">
+    Content-only changes go live in well under a minute; changes that touch
+    configuration rebuild the whole site in a few minutes.
+  </Step>
+  <Step title="Check the deployment">
+    The site's **Deployments** page in Thally Cloud shows every publish, the
+    commit behind it, and a one-click **Roll back**.
+  </Step>
+</Steps>
+
+Open a pull request instead and Thally builds a preview site for it, so
+reviewers read the change exactly as readers will.
+
+## Stay on the current framework
+
+Your content, navigation, and branding are yours; the framework underneath
+ships as immutable releases. When a new release is available, **Settings →
+Version** in Thally Cloud shows it and upgrades the site in one click —
+framework files only, never your content.

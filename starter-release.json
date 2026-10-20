@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "starterVersion": 2,
+  "repository": "thallylabs/starter",
+  "defaultBranch": "main",
+  "runtime": {
+    "repository": "thallylabs/thally",
+    "commitSha": "8f80ea5712a97574ad3f86975301754c3a223912",
+    "treeSha": "e52a9c74d8a362e345c96e4097ce0631ede24157"
+  },
+  "packages": {
+    "@thallylabs/core": "^0.2.17"
+  },
+  "ownership": {
+    "frameworkSyncEligible": [
+      "BUILD-WARNINGS.md",
+      "src/app/**",
+      "src/cloud/**",
+      "src/components/**",
+      "src/config/**",
+      "src/data/api-reference.ts",
+      "src/data/docs.ts",
+      "src/data/get-doc.ts",
+      "src/data/manual-api.ts",
+      "src/lib/**",
+      "src/mdx/rehype.ts",
+      "src/mdx/rehype.test.ts",
+      "src/mdx/__tests__/test-html.ts",
+      "src/mdx/remark.ts",
+      "src/mdx/smart-quotes.ts",
+      "src/mdx/smart-quotes.test.ts",
+      "src/mdx/snippet-registry.ts",
+      "src/styles/**",
+      "src/test/**",
+      "src/middleware.ts",
+      "mdx-components.tsx",
+      "tailwind.config.ts",
+      "starter-release.json",
+      "scripts/agent-readiness.ts",
+      "scripts/build-cloudflare.mts",
+      "scripts/build-embeddings.ts",
+      "scripts/build-runtime-sources.mts",
+      "scripts/lib/**",
+      "scripts/check-cloudflare-worker-size.mts",
+      "scripts/smoke-cloudflare.mts",
+      "scripts/mint-reader-token.ts"
+    ],
+    "userOwnedNeverOverwrite": [
+      "src/content/**",
+      "docs.json",
+      "src/data/site.ts",
+      "src/mdx/custom-components.tsx",
+      "snippets/**",
+      "public/**",
+      "openapi.yaml",
+      "README.md",
+      "AGENTS.md",
+      "LICENSE",
+      ".env*",
+      ".github/**",
+      "open-next.config.ts",
+      "wrangler.jsonc"
+    ],
+    "manualReview": [
+      "package.json",
+      "package-lock.json",
+      ".gitignore",
+      "eslint.config.mjs",
+      "lighthouserc.json",
+      "next.config.ts",
+      "postcss.config.mjs",
+      "tsconfig.json",
+      "vitest.config.ts"
+    ]
+  }
+}

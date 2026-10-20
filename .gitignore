@@ -1,0 +1,45 @@
+# Dependencies
+/node_modules/
+/.github/thally-tooling/node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Tests and builds
+/coverage/
+/.next/
+/out/
+/build/
+/.open-next/
+/.thally-upload/
+/.wrangler/
+/src/generated/runtime-sources.ts
+/src/generated/runtime-docs.ts
+/src/generated/runtime-docs/
+# Managed builds stage customer-authored content here for OpenNext to copy
+# into the immutable static-asset set. The source files remain authoritative.
+/public/_thally/
+
+# Local application data
+/.data/
+/.thally/
+/.dox/
+
+# Environment and deployment credentials
+.env*
+!.env.example
+*.pem
+/.vercel/
+
+# Logs and editor files
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.DS_Store
+next-env.d.ts

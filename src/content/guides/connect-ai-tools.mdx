@@ -1,0 +1,53 @@
+---
+title: Connect AI tools
+description: Every Thally site is agent-readable out of the box — here is what that gives you.
+---
+
+Readers increasingly ask an AI assistant instead of opening a search box. A
+Thally site answers both audiences from the same reviewed content, with no
+extra publishing step.
+
+## What agents can already read
+
+Every published site exposes these surfaces automatically:
+
+<CardGroup cols="2">
+  <Card title="llms.txt" icon="link-simple" href="/llms.txt">
+    A machine-readable index of every page, so assistants can find the right
+    one without crawling.
+  </Card>
+  <Card title="Markdown mirrors" icon="code-simple">
+    Add `.md` to any page URL — `/quickstart.md` — for the clean Markdown an
+    LLM ingests best.
+  </Card>
+  <Card title="MCP endpoint" icon="wrench">
+    A read-only Model Context Protocol server at `/.well-known/mcp.json`
+    lets tools search and read the docs as structured data.
+  </Card>
+  <Card title="Structured answers" icon="grid-round">
+    JSON and JSON-LD projections of each page keep titles, sections, and
+    code blocks intact for retrieval.
+  </Card>
+</CardGroup>
+
+## Point your editor at the docs
+
+Add this site to any MCP-capable tool (Claude Code, Cursor, and others) and it
+can cite current documentation instead of guessing from training data. Most
+tools accept a one-line registration with this site's MCP endpoint URL:
+
+```text
+https://your-site.thally.app/.well-known/mcp.json
+```
+
+## Hand a page to an assistant
+
+Every page's **Copy page** menu includes **Open in ChatGPT / Claude /
+Perplexity** — each opens the assistant preloaded with the page's Markdown
+URL, so answers stay grounded in what the page actually says.
+
+<Note type="info" title="Measure it">
+  The Analytics page in Thally Cloud separates human visits from AI-tool
+  traffic, so you can see which pages agents read and which answers they
+  relay.
+</Note>

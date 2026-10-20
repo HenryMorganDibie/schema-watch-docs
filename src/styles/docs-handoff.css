@@ -1,0 +1,1017 @@
+/*
+ * Thally docs visual system.
+ *
+ * This layer ports the approved design handoff without changing any content,
+ * routing, search, localization, OpenAPI, or AI behavior. The shell is built
+ * from hairlines and the page surface; shadows remain reserved for overlays.
+ */
+
+:root {
+  --theme-radius-sm: 0.375rem;
+  --theme-radius-md: 0.5rem;
+  --theme-radius-lg: 0.75rem;
+  --theme-radius-xl: 0.85rem;
+  --theme-control-radius: 0.5625rem;
+  --theme-sidebar-item-radius: 0;
+  --theme-nav-bar-radius: 0;
+  --theme-nav-tab-radius: 0;
+  --theme-nav-bar-bg: transparent;
+  --theme-nav-bar-border-color: transparent;
+  --theme-nav-tab-active-bg: transparent;
+  --theme-nav-tab-active-shadow: none;
+  /* These semantic aliases let the shell follow each site's configured brand
+     while keeping the approved surface hierarchy and contrast relationships. */
+  --docs-bg: hsl(var(--thally-background));
+  --docs-surface: hsl(var(--thally-muted));
+  --docs-surface-2: hsl(var(--thally-input));
+  --docs-ink: hsl(var(--thally-foreground));
+  --docs-ink-2: color-mix(in oklab, var(--docs-ink) 82%, var(--docs-bg));
+  --docs-mute: hsl(var(--thally-muted-foreground));
+  --docs-faint: color-mix(in oklab, var(--docs-mute) 70%, var(--docs-bg));
+  --docs-line: color-mix(in oklab, var(--docs-ink) 8%, transparent);
+  --docs-line-2: color-mix(in oklab, var(--docs-ink) 14%, transparent);
+  --docs-accent: hsl(var(--thally-accent));
+  --docs-accent-soft: hsl(var(--thally-accent) / 0.1);
+  --docs-primary: hsl(var(--thally-primary));
+  --docs-brand: #737938;
+  --docs-code-bg: color-mix(in oklab, var(--docs-bg) 96%, var(--docs-ink));
+  --docs-sky: #256b8a;
+  --docs-iris: #7257a8;
+  --docs-amber: #9b6418;
+  --docs-str: oklch(0.5 0.08 160);
+  --docs-panel: color-mix(in oklab, var(--docs-surface) 48%, transparent);
+  /* Callout hues: deeper on light, brighter on dark, one per type. Every
+     other callout colour derives from these in the callout block below. */
+  --docs-callout-note: #0757b8;
+  --docs-callout-tip: #1a7f37;
+  --docs-callout-check: #0f7a5e;
+  --docs-callout-warning: #9a6700;
+  --docs-callout-danger: #cf222e;
+  --docs-callout-info: #57606a;
+}
+
+.dark {
+  --docs-code-bg: color-mix(in oklab, var(--docs-bg) 92%, white 3%);
+  --docs-sky: #7cc9ee;
+  --docs-iris: #b7a2ed;
+  --docs-amber: #e7b460;
+  --docs-str: oklch(0.8 0.1 150);
+  --docs-callout-note: #79b8ff;
+  --docs-callout-tip: #5fd068;
+  --docs-callout-check: #4bd4a3;
+  --docs-callout-warning: #f2c230;
+  --docs-callout-danger: #ff7b72;
+  --docs-callout-info: #c9d1d9;
+}
+html {
+  scroll-behavior: auto;
+  font-size: 16px;
+}
+
+body {
+  letter-spacing: normal;
+}
+
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+.thally-docs-root a,
+.thally-docs-root button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.thally-docs-root :where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 1px solid hsl(var(--thally-foreground) / 0.34);
+  outline-offset: 1px;
+  box-shadow: none !important;
+}
+
+/* Selected controls already have an active indicator. Repeating it as a full
+   focus rectangle creates the oversized double highlight seen in navigation. */
+.thally-docs-root :where(
+  [aria-current='page'],
+  [aria-selected='true'],
+  [data-state='active']
+):focus-visible {
+  outline: none;
+}
+
+.thally-docs-topbar {
+  background: color-mix(in oklab, var(--docs-bg) 84%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
+}
+
+.thally-docs-topbar-inner,
+.thally-docs-collection-row {
+  max-width: 1280px;
+  padding-block: 0;
+  padding-inline: 28px;
+}
+
+.thally-docs-root {
+  --docs-header-height: 60px;
+}
+
+/* Opt-in canvas layers stay behind the complete document, including long pages.
+   Omitted settings leave all existing site surfaces and stacking unchanged. */
+[data-site-background='enabled'] .thally-docs-root {
+  isolation: isolate;
+  position: relative;
+  --site-background-image: var(--site-background-light, none);
+}
+
+.dark[data-site-background='enabled'] .thally-docs-root {
+  --site-background-image: var(--site-background-dark, none);
+}
+
+[data-site-background='enabled'] .thally-docs-root::before,
+[data-site-background='enabled'] .thally-docs-root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+[data-site-background='enabled'] .thally-docs-root::before {
+  background-image: var(--site-background-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+[data-site-background='enabled'] .thally-docs-root::after {
+  background-image: var(--site-background-decoration, none);
+  background-size: var(--site-background-decoration-size, cover);
+}
+
+/* Keep reading and navigation surfaces legible over arbitrary owner imagery. */
+[data-site-background='enabled'] .thally-docs-main,
+[data-site-background='enabled'] .thally-docs-sidebar,
+[data-site-background='enabled'] .thally-docs-root footer {
+  background: transparent;
+}
+
+[data-site-background-image='enabled'] .thally-docs-main {
+  background: hsl(var(--thally-background) / 0.9);
+}
+
+[data-site-background-image='enabled'] .thally-docs-sidebar,
+[data-site-background-image='enabled'] .thally-docs-root footer {
+  background: hsl(var(--thally-background) / 0.92);
+}
+
+.thally-docs-collection-row {
+  min-height: 44px;
+  /* Both header rows inherit the same centered shell and inline gutters. */
+}
+
+.thally-docs-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  column-gap: clamp(1rem, calc(280px / var(--collection-count)), 1.5rem);
+  /* Density changes spacing, never the reader's text size. */
+  font-size: 0.875rem;
+}
+
+.thally-docs-tabs .thally-nav-tab-item {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding-inline: 0;
+  border-bottom-width: 2px;
+  /* Wrap whole items first, but let a label wider than the shell remain readable. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
+  font-size: inherit;
+  transition: color 150ms;
+}
+
+.thally-docs-tabs .thally-nav-tab-item[aria-current='page'] {
+  /* Brand the selection marker while keeping collection labels neutral. */
+  border-bottom-color: var(--docs-accent);
+}
+
+/* Any in-content anchor target (migrated <a id> or wrapper with an id) needs the same offset as headings. */
+.thally-docs-prose [id] {
+  scroll-margin-top: 6rem;
+}
+
+@media (min-width: 881px) {
+  .thally-docs-root[data-header-layout='stacked'] {
+    --docs-header-height: 104px;
+  }
+
+  /* The second row must not cover headings reached through the page TOC. */
+  .thally-docs-root[data-header-layout='stacked'] :is([data-heading], .scroll-mt-24, .thally-docs-prose [id]) {
+    scroll-margin-top: calc(var(--docs-header-height, 104px) + 24px);
+  }
+}
+
+.thally-docs-brand:hover {
+  color: hsl(var(--thally-foreground));
+}
+
+/* Only the default mark is square. Uploaded wordmarks own their aspect ratio. */
+.thally-docs-brand img:not([data-custom-logo]) {
+  width: 22px;
+  height: 22px;
+}
+
+.thally-docs-actions > button,
+.thally-docs-actions > div > button {
+  min-height: 36px;
+}
+
+.thally-docs-search {
+  width: 230px;
+}
+
+.thally-docs-search > button:first-of-type {
+  position: relative;
+  height: 36px;
+  width: 230px;
+  gap: 8px;
+  border: 0;
+  border-radius: 10px;
+  padding-inline: 12px 44px;
+  background: var(--docs-surface);
+  font-size: 0.85rem;
+}
+
+.thally-docs-search > button:first-of-type kbd {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 4px;
+  transform: translateY(-50%);
+  border-color: var(--docs-line-2);
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--docs-bg) 72%, transparent);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.thally-docs-search > button:nth-of-type(2) {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+}
+
+.thally-docs-assistant-trigger {
+  max-width: 220px;
+}
+
+.thally-docs-topbar-inner[data-density='compact'] .thally-docs-search,
+.thally-docs-topbar-inner[data-density='compact'] .thally-docs-search > button:first-of-type {
+  width: 180px;
+}
+
+.thally-docs-actions [aria-label='Toggle theme'],
+.thally-docs-actions [aria-label='Switch language'] {
+  height: 36px;
+  min-height: 36px;
+  width: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.thally-theme-sun { display: none; }
+.dark .thally-theme-sun { display: block; }
+.dark .thally-theme-moon { display: none; }
+
+.thally-docs-topbar-inner > button[aria-haspopup='dialog'] {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.thally-docs-shell {
+  align-items: stretch;
+}
+
+.thally-docs-sidebar {
+  align-self: stretch;
+  background: var(--docs-bg);
+}
+
+.thally-docs-sidebar a[aria-current='page'] {
+  background: var(--docs-accent-soft) !important;
+  color: var(--docs-accent) !important;
+  text-shadow: -0.2px 0 currentColor, 0.2px 0 currentColor;
+}
+
+.thally-docs-main {
+  min-width: 0;
+}
+
+.thally-docs-article {
+  min-width: 0;
+}
+
+.thally-docs-prose {
+  min-width: 0;
+  color: var(--docs-ink-2);
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.thally-docs-prose > :where(p, ul, ol, blockquote),
+.thally-docs-prose :where(.prose) {
+  max-width: 66ch;
+}
+
+.thally-docs-prose :where(h1, h2, h3, h4) {
+  color: hsl(var(--thally-foreground));
+  font-family: var(--font-heading);
+  text-wrap: balance;
+}
+
+.thally-docs-prose :where(h2) {
+  margin-top: 2.25rem;
+  margin-bottom: 1.125rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 2rem;
+  letter-spacing: -0.025em;
+}
+
+/* A Card title is an <h2> inside the prose. This out-ranks the prose heading rule above
+   (and the utilities on the element) so it keeps the card's own size and spacing. */
+.thally-docs-prose .thally-docs-card-title {
+  margin-block: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+}
+
+.thally-docs-prose .thally-docs-card-title[data-icon-stacked] {
+  margin-top: 1rem;
+}
+
+.thally-docs-prose :where(h3) {
+  margin-top: 2rem;
+  margin-bottom: 0.875rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.75rem;
+  letter-spacing: -0.025em;
+}
+
+.thally-docs-prose :where(p) {
+  margin-block: 0 20px;
+  color: var(--docs-ink-2);
+  text-wrap: pretty;
+}
+
+/* ----------------------------------------------------------------------------
+   Callouts: one hue per type.
+
+   `--co` is the only colour the rules below read. It resolves from three
+   slots: an author's inline `--co-light` / `--co-dark` (custom callouts),
+   then the type's `--co-tone` token, then the site accent. Fill, border,
+   icon, title, single-line text, links, and inline code all derive from it
+   with color-mix, so light and dark keep the same relationship. The border
+   wraps all four sides; there is no accent bar, no icon background, and no
+   pill around the title.
+
+   The root opts out of Tailwind's prose plugin (`not-prose`) so this block
+   owns the typography inside the surface. Layout is chosen by the component:
+   `solo` (one line, takes the hue), `titled` (title takes the hue, body stays
+   in ink), or `body` (several blocks, all in ink).
+   ------------------------------------------------------------------------- */
+.thally-callout {
+  --co: var(--co-light, var(--co-tone, var(--docs-accent)));
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin: 24px 0 30px;
+  padding: 15px 18px;
+  max-width: none;
+  border: 1px solid color-mix(in oklab, var(--co) 34%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--co) 9%, transparent);
+  color: var(--docs-ink-2);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.dark .thally-callout {
+  --co: var(--co-dark, var(--co-tone, var(--docs-accent)));
+  border-color: color-mix(in oklab, var(--co) 42%, transparent);
+  background: color-mix(in oklab, var(--co) 13%, transparent);
+}
+
+.thally-callout[data-callout='note'] { --co-tone: var(--docs-callout-note); }
+.thally-callout[data-callout='tip'] { --co-tone: var(--docs-callout-tip); }
+.thally-callout[data-callout='check'] { --co-tone: var(--docs-callout-check); }
+.thally-callout[data-callout='warning'] { --co-tone: var(--docs-callout-warning); }
+.thally-callout[data-callout='danger'] { --co-tone: var(--docs-callout-danger); }
+.thally-callout[data-callout='info'] { --co-tone: var(--docs-callout-info); }
+
+/* Info is the neutral exception: it sits on the page surface with a hairline
+   instead of derived tints, and its title or single line reads in ink. An
+   author-supplied colour turns it back into an ordinary derived surface. */
+.thally-callout[data-callout='info']:not([data-callout-color='custom']) {
+  background: var(--docs-surface);
+  border-color: var(--docs-line-2);
+}
+
+.thally-callout[data-callout='info']:not([data-callout-color='custom']) .thally-callout-title,
+.thally-callout[data-callout='info']:not([data-callout-color='custom'])[data-callout-layout='solo'] .thally-callout-content {
+  color: var(--docs-ink);
+}
+
+/* The 3px offset centres an 18px glyph on the first 1.6-line-height line. */
+.thally-callout > .thally-callout-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  color: var(--co);
+}
+
+.thally-callout .thally-callout-content {
+  min-width: 0;
+}
+
+.thally-callout .thally-callout-content :where(p) {
+  margin: 0 0 10px;
+  max-width: none;
+  color: inherit;
+}
+
+.thally-callout .thally-callout-content :where(ul, ol) {
+  margin: 0 0 10px;
+  padding-left: 1.25em;
+}
+
+.thally-callout .thally-callout-content :where(ul) {
+  list-style: disc;
+}
+
+.thally-callout .thally-callout-content :where(ol) {
+  list-style: decimal;
+}
+
+.thally-callout .thally-callout-content :where(li) {
+  margin: 4px 0;
+}
+
+/* Callouts own their vertical padding. The article rhythm must not leave a
+   trailing block margin inside the tinted surface. The title keeps its gap
+   when the body is bare text, since it is then the last element child. */
+.thally-callout .thally-callout-content > :not(.thally-callout-title):last-child {
+  margin-bottom: 0;
+}
+
+.thally-callout .thally-callout-title {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--co);
+  font-weight: 500;
+}
+
+.thally-callout[data-callout-layout='solo'] .thally-callout-content {
+  color: var(--co);
+  font-weight: 500;
+}
+
+.thally-callout .thally-callout-content a {
+  color: var(--co);
+  font-weight: 500;
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in oklab, var(--co) 45%, transparent);
+  text-underline-offset: 3px;
+}
+
+.thally-callout .thally-callout-content a:hover {
+  color: var(--co);
+  text-decoration-color: currentColor;
+}
+
+.thally-callout .thally-callout-content :where(strong, b) {
+  color: var(--docs-ink);
+  font-weight: 600;
+}
+
+.thally-callout[data-callout-layout='solo'] .thally-callout-content :where(strong, b) {
+  color: inherit;
+}
+
+/* Inline code keeps the article's chip metrics (the transparent border holds
+   the box size) and takes the hue for its fill and text. */
+.thally-callout .thally-callout-content :where(code):not(:where(pre *)) {
+  border-color: transparent;
+  background: color-mix(in oklab, var(--co) 14%, transparent);
+  color: var(--co);
+}
+
+/* A code block that follows a callout directly reads as its continuation, so
+   it is pulled up into the callout's bottom margin; a callout that follows a
+   code block gets a little more air than the article default. */
+.thally-callout + .thally-docs-code {
+  margin-top: -16px;
+}
+
+.thally-docs-code + .thally-callout {
+  margin-top: 34px;
+}
+
+/* Separators are author-controlled. A heading alone should not imply a hard
+   section break, while an explicit Markdown rule receives enough air to mark
+   a genuine change of subject without adding a new surface or shadow. */
+.thally-docs-prose :where(hr) {
+  max-width: none;
+  margin-block: 6rem;
+  border-color: hsl(var(--thally-border));
+}
+
+.thally-docs-prose :where(hr + h2) {
+  margin-top: 0;
+}
+
+.thally-docs-prose :where(a) {
+  color: inherit;
+  text-decoration-color: hsl(var(--thally-accent));
+  transition: color 120ms ease;
+}
+
+.thally-docs-prose :where(p, li, td, dd) a {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.thally-docs-prose :where(p, li, td, dd) a:hover {
+  color: hsl(var(--thally-accent));
+}
+
+.thally-docs-prose :where(h1, h2, h3, h4) a {
+  color: inherit;
+}
+
+.thally-docs-hero a.bg-primary {
+  color: hsl(var(--thally-primary-foreground)) !important;
+}
+
+.thally-docs-prose .thally-docs-hero-copy {
+  margin-block: 2rem 1.08rem;
+}
+
+.thally-docs-prose :where(code):not(:where(pre *)) {
+  border: 1px solid hsl(var(--thally-border));
+  border-radius: 4px;
+  background: hsl(var(--thally-muted));
+  padding: 0 4px;
+  color: hsl(var(--thally-foreground) / 0.82);
+  font-size: 0.78em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.thally-docs-prose :where(code):not(:where(pre *))::before,
+.thally-docs-prose :where(code):not(:where(pre *))::after {
+  content: none;
+}
+
+.thally-docs-code {
+  width: 100%;
+  max-width: 54rem;
+  min-width: 0;
+  border-color: var(--docs-line);
+  background: var(--docs-code-bg);
+  color: var(--docs-ink-2);
+  box-shadow: none;
+  --shiki-color-text: var(--docs-ink-2);
+  --shiki-token-property: var(--docs-sky);
+  --shiki-token-constant: var(--docs-amber);
+  --shiki-token-string: var(--docs-str);
+  --shiki-token-comment: var(--docs-faint);
+  --shiki-token-keyword: var(--docs-iris);
+  --shiki-token-parameter: var(--docs-iris);
+  --shiki-token-function: var(--docs-amber);
+  --shiki-token-string-expression: var(--docs-str);
+  --shiki-token-punctuation: var(--docs-mute);
+}
+
+.thally-docs-code pre {
+  max-width: 100%;
+  margin: 0;
+  background: transparent !important;
+  color: var(--docs-ink-2) !important;
+  overflow-x: auto;
+}
+
+.thally-docs-api .thally-docs-code {
+  max-width: 100%;
+}
+
+.thally-docs-card {
+  box-shadow: none;
+}
+
+.thally-docs-card:hover {
+  border-color: var(--docs-accent);
+}
+
+/* Library-aware icons. Bundled Lucide glyphs render inline; every other name
+   resolves to the selected library's pinned CDN asset through a CSS mask. The
+   layout stamps html[data-icon-library] from docs.json, so the same markup
+   serves all three libraries and client components never read config. */
+.thally-icon {
+  --thally-icon-mask: var(--thally-icon-lucide);
+}
+
+html[data-icon-library='fontawesome'] .thally-icon {
+  --thally-icon-mask: var(--thally-icon-fontawesome);
+}
+
+html[data-icon-library='tabler'] .thally-icon {
+  --thally-icon-mask: var(--thally-icon-tabler);
+}
+
+.thally-icon-mask {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: currentColor;
+  -webkit-mask: var(--thally-icon-mask) center / contain no-repeat;
+  mask: var(--thally-icon-mask) center / contain no-repeat;
+}
+
+/* A bundled Lucide glyph is the offline default; other libraries swap it for
+   their own mask of the same name. */
+.thally-icon[data-icon-source='lucide'] > .thally-icon-mask {
+  display: none;
+}
+
+html[data-icon-library='fontawesome'] .thally-icon[data-icon-source='lucide'] > .thally-icon-glyph,
+html[data-icon-library='tabler'] .thally-icon[data-icon-source='lucide'] > .thally-icon-glyph {
+  display: none;
+}
+
+html[data-icon-library='fontawesome'] .thally-icon[data-icon-source='lucide'] > .thally-icon-mask,
+html[data-icon-library='tabler'] .thally-icon[data-icon-source='lucide'] > .thally-icon-mask {
+  display: block;
+}
+
+/* Content icons use the site accent by default. A site-wide neutral option or
+   local MDX override still resolves through the live branding tokens. */
+.thally-content-icon {
+  color: hsl(var(--thally-foreground) / 0.6);
+  transition: color 150ms ease, opacity 150ms ease;
+}
+
+[data-content-icons='accent'] .thally-content-icon[data-content-icon-tone='site'],
+.thally-content-icon[data-content-icon-tone='accent'] {
+  color: hsl(var(--thally-accent));
+}
+
+[data-content-icons='neutral'] .thally-content-icon[data-content-icon-tone='site'],
+.thally-content-icon[data-content-icon-tone='neutral'] {
+  color: hsl(var(--thally-foreground) / 0.6);
+}
+
+.group\/card:hover .thally-content-icon {
+  opacity: 0.8;
+}
+
+/* Accent-aware card chrome. When the resolved tone is accent (site-wide via
+   appearance.contentIcons, or a per-card iconColor override), the card border
+   picks up a restrained tint of the site accent and hover deepens it. Alpha
+   blends against the page surface keep contrast usable in both themes, and
+   everything resolves through --thally-accent so owner accent changes (and
+   Cloud branding) flow through with no hardcoded color. Neutral overrides on
+   an accent site fall back to the quiet foreground-based chrome. */
+[data-content-icons='accent'] .thally-docs-card[data-card-tone='site'],
+.thally-docs-card[data-card-tone='accent'] {
+  border-color: hsl(var(--thally-accent) / 0.28);
+}
+
+[data-content-icons='accent'] .thally-docs-card[data-card-tone='site']:hover,
+.thally-docs-card[data-card-tone='accent']:hover {
+  border-color: hsl(var(--thally-accent) / 0.55);
+}
+
+[data-content-icons='neutral'] .thally-docs-card[data-card-tone='site'],
+.thally-docs-card[data-card-tone='neutral'] {
+  border-color: hsl(var(--thally-border));
+}
+
+[data-content-icons='neutral'] .thally-docs-card[data-card-tone='site']:hover,
+.thally-docs-card[data-card-tone='neutral']:hover {
+  border-color: hsl(var(--thally-foreground) / 0.25);
+}
+
+/* Card copy sits under the title at Mintlify's reading size; the Card body
+   is nested inside the padded column, so target its own class rather than a
+   direct-child selector. */
+.thally-docs-card-body {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.thally-docs-card-body :where(p, ul, ol) {
+  margin-block: 0.35em;
+}
+
+.thally-docs-card-body > :first-child {
+  margin-top: 0;
+}
+
+.thally-docs-card-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* A linked card's title link stretches over the whole card; links authored in
+   the body sit above it so both stay clickable without nesting anchors. */
+.thally-docs-card-link::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: '';
+}
+
+.thally-docs-card-body a {
+  position: relative;
+  z-index: 2;
+}
+
+/* External cards reveal a corner glyph on hover unless an explicit arrow
+   already occupies that corner. */
+.thally-docs-card[data-card-external]:not([data-card-arrow])::after {
+  position: absolute;
+  top: 12px;
+  right: 15px;
+  color: hsl(var(--thally-foreground) / 0.45);
+  content: '\2197';
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.thally-docs-card[data-card-external]:hover:not([data-card-arrow])::after {
+  opacity: 1;
+}
+
+.thally-docs-card :where(h2, h3, p:first-child) {
+  font-family: var(--font-heading);
+  letter-spacing: -0.012em;
+}
+
+.thally-docs-toc {
+  padding-top: 0;
+}
+
+.thally-docs-toc nav {
+  border-inline-start-color: var(--docs-line);
+}
+
+.thally-docs-toc a[aria-current='location'],
+.thally-docs-toc a[aria-current='true'],
+.thally-docs-toc a[data-active='true'] {
+  color: var(--docs-accent);
+  border-inline-start-color: var(--docs-accent);
+}
+
+.thally-docs-root footer {
+  border-color: hsl(var(--thally-border));
+  background: hsl(var(--thally-background));
+  box-shadow: none;
+}
+
+.thally-docs-root [role='dialog'] {
+  scrollbar-width: none;
+}
+
+/* Ask ThallyAI is one docked workspace. Sources, answer tools, and the
+   composer use hairlines and the shared surface ramp instead of nested cards. */
+.thally-docs-chat-panel {
+  background: var(--docs-bg);
+  box-shadow: -20px 0 54px rgb(0 0 0 / 0.12);
+  animation: thally-docs-dock-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dark .thally-docs-chat-panel {
+  box-shadow: -20px 0 54px rgb(0 0 0 / 0.42);
+}
+
+.thally-docs-chat-brand {
+  color: var(--docs-brand);
+}
+
+.thally-docs-chat-user {
+  border-radius: 14px 14px 4px 14px;
+  background: var(--docs-surface-2);
+}
+
+.thally-docs-chat-sources {
+  border-color: var(--docs-line);
+}
+
+.thally-docs-chat-feedback button {
+  color: var(--docs-faint);
+}
+
+.thally-docs-chat-feedback button:hover,
+.thally-docs-chat-feedback button[aria-pressed='true'] {
+  background: var(--docs-surface);
+  color: var(--docs-ink);
+}
+
+/* The composer is a quiet raised field. Focus deepens the hairline and adds a
+   soft halo instead of switching to a saturated accent outline, which read as
+   an error state against dark surfaces. */
+.thally-docs-chat-composer {
+  border-color: var(--docs-line-2);
+  background: var(--docs-surface);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.thally-docs-chat-composer:focus-within {
+  border-color: color-mix(in oklab, var(--docs-accent) 38%, var(--docs-line-2));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--docs-accent) 10%, transparent);
+}
+
+.thally-docs-chat-attach {
+  color: var(--docs-mute);
+}
+
+.thally-docs-chat-attach:hover:not(:disabled) {
+  background: var(--docs-surface-2);
+  color: var(--docs-ink);
+}
+
+@keyframes thally-docs-dock-in {
+  from { transform: translateX(18px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@media (min-width: 1361px) {
+  html.thally-docs-ai-open:not(.thally-docs-ai-expanded) .thally-docs-shell {
+    width: calc(100% - 420px);
+    margin-right: 420px;
+    transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1), margin-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  html.thally-docs-ai-open:not(.thally-docs-ai-expanded) .thally-docs-toc {
+    display: none;
+  }
+
+  html.thally-docs-ai-open:not(.thally-docs-ai-expanded) .thally-docs-chat-panel {
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  .thally-docs-toc {
+    display: none;
+  }
+
+  .thally-docs-language-label {
+    display: none;
+  }
+
+  /* navbar.links entries (text links and buttons) keep their label; only the icon-led repo link collapses. */
+  .thally-docs-topbar-link:not([data-topbar-text]) span {
+    display: none;
+  }
+
+  .thally-docs-topbar-link[data-topbar-text] svg {
+    display: none;
+  }
+}
+
+@media (max-width: 1280px) {
+  .thally-docs-search,
+  .thally-docs-search > button:first-of-type {
+    width: 170px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .thally-docs-search,
+  .thally-docs-search > button:first-of-type {
+    width: 150px;
+  }
+
+  .thally-docs-topbar-inner[data-density='compact'] .thally-docs-search,
+  .thally-docs-topbar-inner[data-density='compact'] .thally-docs-search > button:first-of-type {
+    width: 120px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .thally-docs-assistant-trigger > span,
+  .thally-docs-action-divider {
+    display: none;
+  }
+
+  .thally-docs-assistant-trigger {
+    width: 36px;
+    max-width: 36px;
+    justify-content: center;
+    padding-inline: 0;
+  }
+}
+
+@media (max-width: 880px) {
+  .thally-docs-topbar-inner > button[aria-haspopup='dialog'] {
+    display: inline-flex;
+  }
+
+  .thally-docs-collection-row {
+    display: none;
+  }
+
+  .thally-docs-brand {
+    margin-inline-end: 8px;
+  }
+
+  .thally-docs-brand > span:last-child {
+    display: none;
+  }
+
+  .thally-docs-search,
+  .thally-docs-topbar-inner[data-density='compact'] .thally-docs-search {
+    width: 36px;
+  }
+
+  .thally-docs-search > button:first-of-type {
+    display: none;
+  }
+
+  .thally-docs-search > button:nth-of-type(2) {
+    display: flex;
+  }
+
+  .thally-docs-sidebar {
+    display: none;
+  }
+
+  .thally-docs-main > div {
+    padding-inline: 1.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .thally-docs-topbar-link,
+  .thally-docs-primary {
+    display: none;
+  }
+
+  .thally-docs-search,
+  .thally-docs-topbar-inner[data-density='compact'] .thally-docs-search {
+    width: 30px;
+  }
+
+  .thally-docs-search > button:first-of-type {
+    display: none;
+  }
+
+  .thally-docs-search > button:nth-of-type(2) {
+    display: flex;
+  }
+
+  .thally-docs-topbar-inner {
+    gap: 6px;
+    padding-inline: 14px;
+  }
+
+  .thally-docs-main {
+    padding-top: 26px;
+  }
+}
+
+@media (max-width: 420px) {
+  .thally-docs-brand > span {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thally-docs-root *,
+  .thally-docs-root *::before,
+  .thally-docs-root *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

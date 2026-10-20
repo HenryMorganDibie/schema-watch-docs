@@ -1,0 +1,68 @@
+{
+  "theme": "default",
+  "appearance": {
+    "contentIcons": "accent"
+  },
+  "markdown": {
+    "enabled": true
+  },
+  "i18n": {
+    "defaultLocale": "en",
+    "locales": [
+      {
+        "code": "en",
+        "label": "English"
+      }
+    ]
+  },
+  "navbar": {
+    "primary": {
+      "label": "Get started",
+      "href": "/quickstart"
+    }
+  },
+  "tabs": [
+    {
+      "tab": "Get started",
+      "groups": [
+        {
+          "group": "Get started",
+          "pages": ["introduction", "quickstart"]
+        },
+        {
+          "group": "Design your docs",
+          "pages": ["components", "customization"]
+        }
+      ]
+    },
+    {
+      "tab": "Guides",
+      "groups": [
+        {
+          "group": "Work with Thally",
+          "pages": [
+            "guides/create-a-site",
+            "guides/work-with-the-cli",
+            "guides/connect-ai-tools"
+          ]
+        }
+      ]
+    },
+    {
+      "tab": "API Reference",
+      "groups": [
+        {
+          "group": "Overview",
+          "pages": ["api/introduction", "api/authentication"]
+        }
+      ],
+      "api": {
+        "source": "openapi.yaml"
+      }
+    },
+    {
+      "tab": "Changelog",
+      "href": "/changelog"
+    }
+  ]
+}

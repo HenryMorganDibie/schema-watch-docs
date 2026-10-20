@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "documentation-site",
+  "main": ".open-next/worker.js",
+  // Keep new scaffolds on the runtime behavior validated by this release.
+  "compatibility_date": "2026-07-15",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Keep deployment-managed variables that are not declared in this config.
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  },
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+    // Authored source assets are an internal Worker data plane. Route public
+    // requests through middleware so protected sites cannot bypass access
+    // control by requesting raw Markdown from the static asset namespace.
+    "run_worker_first": ["/_thally/content/*"]
+  }
+}
