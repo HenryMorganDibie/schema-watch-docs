@@ -1,0 +1,104 @@
+---
+title: CLI reference
+description: Every Schema-Watch command, flag, default, and exit code.
+---
+
+Run any command with `npx schema-watch <command>`, or install the package with
+`npm install --save-dev schema-watch` and call `schema-watch` from npm scripts.
+Commands read `schema-watch.config.json` from the current directory when it
+exists.
+
+## `init`
+
+Creates `schema-watch.config.json` in the current directory.
+
+```bash
+npx schema-watch init --target http://localhost:3001
+```
+
+| Flag | Description |
+| --- | --- |
+| `--target <url>` | Base URL of the API to proxy. |
+
+## `start`
+
+Starts the reverse proxy and the live dashboard. Send API traffic to the proxy
+port instead of your backend.
+
+```bash
+npx schema-watch start
+```
+
+| Config key | Default | Description |
+| --- | --- | --- |
+| `target` | none | API the proxy forwards to. |
+| `proxyPort` | `4560` | Port your frontend or tests call. |
+| `apiPort` | `4561` | Dashboard and local REST API. |
+| `dbPath` | `./schema-watch.db` | Local capture database. |
+| `frontendSrcDir` | `../my-frontend/src` | Folder scanned for files that reference changed endpoints. |
+
+## `export`
+
+Writes every contract captured so far to a JSON file.
+
+```bash
+npx schema-watch export --out contract.json
+```
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--out <file>` | `contract.json` | Output path. |
+
+## `check`
+
+Compares a contract with a baseline and reports every change with its
+severity.
+
+```bash
+npx schema-watch check --contract contract.json --baseline .schema-watch/baseline.json
+```
+
+| Flag | Description |
+| --- | --- |
+| `--contract <file>` | Contract to check. Defaults to the local capture database. |
+| `--baseline <file>` | Compare locally against this contract. No account needed. |
+| `--frontend-src <dir>` | Scan this folder for files that reference changed endpoints. Overrides `frontendSrcDir`. |
+| `--sarif <file>` | Also write SARIF 2.1.0 for GitHub code scanning. |
+| `--project <id> --api-key <key>` | Use the hosted Cloud gate instead of `--baseline`. |
+
+When `GITHUB_TOKEN` and the GitHub Actions environment are present, `check`
+also posts a pull request comment and a check run named `schema-watch`.
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | No breaking changes. |
+| `1` | At least one breaking change. |
+| `2` | Input error: no contract captured, a file not found, or neither `--baseline` nor Cloud credentials given. |
+
+## `context`
+
+Writes a Markdown brief of captured endpoints, recent breaking changes, and
+frontend cross-references, for AI coding assistants.
+
+```bash
+npx schema-watch context --out CONTEXT.md
+npx schema-watch context --claude-md
+```
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--out <file>` | `CONTEXT.md` | Output path. |
+| `--claude-md` | off | Insert or update a marked section in `CLAUDE.md` instead. |
+| `--limit <n>` | `20` | Maximum recent breaking changes to include. |
+
+## `telemetry`
+
+Anonymous usage telemetry is **off** until you enable it.
+
+```bash
+npx schema-watch telemetry status
+npx schema-watch telemetry enable
+npx schema-watch telemetry disable
+```

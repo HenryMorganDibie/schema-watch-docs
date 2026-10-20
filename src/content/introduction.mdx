@@ -1,45 +1,92 @@
 ---
 title: Introduction
-description: Give readers a clear path from their first question to a result they can verify.
+description: Schema-Watch catches breaking API contract changes before they reach your frontend, locally and in CI.
 mode: home
 ---
 
 <Hero
-  title="Build documentation around the reader"
-  subtitle="Start with a useful first result, organize what follows, and publish every format from one reviewable source."
-  primaryLabel="Get started"
+  title="Catch breaking API changes before your users do"
+  subtitle="Schema-Watch records the shape of every API response your app uses, then tells you exactly which field changed, how badly, and which frontend files will break."
+  primaryLabel="Run the quickstart"
   primaryHref="/quickstart"
-  secondaryLabel="Publish your docs"
-  secondaryHref="/guides/create-a-site"
+  secondaryLabel="Gate pull requests in CI"
+  secondaryHref="/guides/ci-contract-check"
 />
 
-## Build the reader journey
+## What Schema-Watch does
 
-Begin with the task that brings most readers to your documentation, then make
-the next useful step obvious.
+A backend changes `id` from a string to a number. Nothing throws, the build is
+green, and the first sign of trouble is a broken screen in production.
+Schema-Watch closes that gap.
+
+It runs as a local reverse proxy between your frontend and your API. Every
+request and response that passes through is reduced to its **shape**: field
+names, types, nullability, and whether a field is required. When a shape
+changes, Schema-Watch grades the change and shows it on a live dashboard. In
+CI, the same comparison runs against a committed baseline and fails the build
+on a breaking change.
+
+```console
+BREAKING  GET /api/users/:id (response)
+    id: string → number
+    email was removed (was string)
+    affects: web/src/user.js
+
+Breaking API contract changes detected.
+```
+
+## Who it is for
+
+- **Frontend engineers** who consume an API they do not control and want to
+  know the moment its contract drifts.
+- **Backend engineers** who want proof that a refactor did not change a
+  response shape that callers depend on.
+- **Teams** who want a required pull request check that blocks contract breaks
+  without writing or maintaining an OpenAPI specification by hand.
+
+## What it catches
+
+| Change | Example | Typical verdict |
+| --- | --- | --- |
+| Field type changed | `total: number → string` | Breaking |
+| Field removed | `email` no longer returned | Breaking |
+| Nullability changed | `user: object → null` | Breaking |
+| Optional field became required | request body now needs `currency` | Breaking for requests |
+| Array item shape changed | `items[].price` changed type | Breaking |
+| Field added | `items[].archived` added to a response | Safe |
+
+Severity depends on direction. A newly required field breaks a **request**
+body, because existing callers do not send it, but is harmless in a
+**response**.
+
+<Info>
+  Schema-Watch compares shapes, not values. Timestamps, IDs, and counts change
+  on every request without raising an alert, so every alert means the
+  contract actually changed.
+</Info>
+
+## How it fits together
 
 <CardGroup cols="2">
-  <Card title="Write your quickstart" icon="party-horn" href="/quickstart">
-    Turn prerequisites, setup, one realistic task, and verification into a short path.
+  <Card title="Local proxy and dashboard" icon="eye" href="/quickstart">
+    `schema-watch start` proxies your API on port 4560 and serves a live
+    dashboard on port 4561.
   </Card>
-  <Card title="Organize your navigation" icon="grid-round" href="/customization">
-    Group related tasks and references around how people use your product.
+  <Card title="CI contract gate" icon="shield-check" href="/guides/ci-contract-check">
+    `schema-watch check` compares a captured contract with a committed baseline
+    and exits with code 1 on a breaking change.
   </Card>
-  <Card title="Document your API" icon="code-simple" href="/api">
-    Replace `openapi.yaml` to publish browsable endpoint docs with a live playground.
+  <Card title="CLI reference" icon="terminal" href="/reference/cli">
+    Every command and flag, with exit codes.
   </Card>
-  <Card title="Learn the Thally workflow" icon="wrench" href="/guides/create-a-site">
-    Create, publish, and update sites from the Cloud dashboard, the CLI, or your AI tools.
+  <Card title="Source on GitHub" icon="github" href="https://github.com/HenryMorganDibie/schema-watch">
+    The detection engine, CLI, and dashboard are open source under Apache-2.0.
   </Card>
 </CardGroup>
 
-## Publish from one source
+## Requirements
 
-Thally turns the same reviewed content into HTML, search, agent discovery files,
-Markdown mirrors, and a read-only MCP surface — so people and AI tools read the
-same, current answer. Add only the locales your readers need.
-
-<Note type="info" title="Start with the product, not the template">
-  Replace this page with the questions, terminology, and workflows your readers
-  already use. Keep `docs.json` focused on the path between those tasks.
-</Note>
+Schema-Watch is a Node.js CLI published to npm as `schema-watch`. It needs
+**Node.js 22.5 or newer**, because it stores captured contracts in the
+built-in `node:sqlite` module. No account is required, and nothing leaves your
+machine unless you opt in to the hosted service.

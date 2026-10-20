@@ -70,4 +70,8 @@ upgrade an existing site or move a production release pointer.
 
 ## Product context
 
-<!-- Add canonical terminology, audience details, and content boundaries here. -->
+- Product: Schema-Watch, the `schema-watch` npm CLI. Write the name with a hyphen and capital W.
+- Audience: frontend and backend engineers, and teams that gate pull requests in CI.
+- Canonical terms: proxy (port 4560), dashboard (port 4561), contract, baseline, breaking change, affected files.
+- Every command on these pages was run against `schema-watch@0.1.0` on Node.js 22. Re-run the quickstart after any CLI release.
+- Hosted Cloud features are early access; document only the open-source CLI unless asked.

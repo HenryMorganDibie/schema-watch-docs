@@ -17,52 +17,41 @@
   },
   "navbar": {
     "primary": {
-      "label": "Get started",
+      "label": "Quickstart",
       "href": "/quickstart"
     }
   },
   "tabs": [
     {
-      "tab": "Get started",
+      "tab": "Documentation",
       "groups": [
         {
           "group": "Get started",
-          "pages": ["introduction", "quickstart"]
+          "pages": [
+            "introduction",
+            "quickstart"
+          ]
         },
         {
-          "group": "Design your docs",
-          "pages": ["components", "customization"]
-        }
-      ]
-    },
-    {
-      "tab": "Guides",
-      "groups": [
-        {
-          "group": "Work with Thally",
+          "group": "Guides",
           "pages": [
-            "guides/create-a-site",
-            "guides/work-with-the-cli",
-            "guides/connect-ai-tools"
+            "guides/ci-contract-check"
+          ]
+        },
+        {
+          "group": "Reference",
+          "pages": [
+            "reference/cli"
           ]
         }
       ]
     },
     {
-      "tab": "API Reference",
-      "groups": [
-        {
-          "group": "Overview",
-          "pages": ["api/introduction", "api/authentication"]
-        }
-      ],
-      "api": {
-        "source": "openapi.yaml"
-      }
-    },
-    {
       "tab": "Changelog",
       "href": "/changelog"
     }
-  ]
+  ],
+  "ai": {
+    "chat": true
+  }
 }

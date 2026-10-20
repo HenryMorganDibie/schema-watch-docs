@@ -1,0 +1,252 @@
+---
+title: Block breaking API changes in GitHub Actions
+description: Add a required pull request check that captures your API contract, compares it with a committed baseline, and fails on breaking changes.
+---
+
+This guide turns the comparison from the [quickstart](/quickstart) into a
+pull request check. When a pull request changes a response shape in a way that
+breaks callers, the check fails, a comment on the pull request lists every
+change and the files it affects, and the findings appear in the repository's
+**Security** tab.
+
+The local comparison needs no Schema-Watch account and no secrets. It uses the
+`GITHUB_TOKEN` that GitHub Actions provides to every workflow.
+
+## Before you begin
+
+- A repository whose backend you can start inside a GitHub Actions job.
+- A way to exercise the API: an integration test suite, an end-to-end suite,
+  or a short smoke script of `curl` calls.
+- A baseline contract committed at `.schema-watch/baseline.json`. The
+  [quickstart](/quickstart) shows how to export one.
+
+## How the check works
+
+The job runs four stages. The order matters, because Schema-Watch can only
+check the endpoints that actually passed through its proxy.
+
+1. **Start** your backend and the Schema-Watch proxy in front of it.
+2. **Exercise** the API through the proxy on port 4560.
+3. **Export** the captured contract to `contract.json`.
+4. **Check** `contract.json` against the committed baseline. A breaking change
+   exits with code `1` and fails the job.
+
+<Warning>
+  The most common mistake is running tests against the backend directly.
+  Requests that skip port 4560 are never captured, the contract is empty, and
+  `check` exits with code `2` and the message `No contract captured yet`.
+</Warning>
+
+## Add the workflow
+
+<Steps>
+  <Step title="Configure Schema-Watch for CI">
+    Commit a `schema-watch.config.json` at the repository root. Set `target`
+    to the address your backend listens on inside the job and
+    `frontendSrcDir` to your frontend source folder.
+
+    ```json schema-watch.config.json
+    {
+      "target": "http://localhost:3001",
+      "proxyPort": 4560,
+      "apiPort": 4561,
+      "dbPath": "./schema-watch.db",
+      "frontendSrcDir": "web/src",
+      "sync": { "enabled": false }
+    }
+    ```
+
+    Add the capture database to `.gitignore`. It is rebuilt on every run.
+
+    ```text .gitignore
+    schema-watch.db*
+    contract.json
+    schema-watch.sarif
+    ```
+  </Step>
+
+  <Step title="Point your tests at the proxy">
+    Make the API base URL your tests use configurable, and set it to
+    `http://localhost:4560` in CI. If you do not have an integration suite
+    yet, a smoke script that calls each endpoint your frontend depends on is
+    enough to start:
+
+    ```bash scripts/contract-smoke.sh
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BASE="${API_BASE_URL:-http://localhost:4560}"
+
+    curl -fsS "$BASE/api/users/42"     > /dev/null
+    curl -fsS "$BASE/api/orders/1001"  > /dev/null
+    curl -fsS "$BASE/api/session"      > /dev/null
+    ```
+
+    Cover every endpoint you want under contract. An endpoint that is never
+    called is not checked.
+  </Step>
+
+  <Step title="Create the workflow file">
+    Save this as `.github/workflows/schema-watch.yml`. Replace the
+    `Start the backend` command with whatever starts your API.
+
+    ```yaml .github/workflows/schema-watch.yml
+    name: schema-watch
+
+    on:
+      pull_request:
+
+    permissions:
+      contents: read
+      pull-requests: write   # post the report comment
+      checks: write          # publish the "schema-watch" check run
+      security-events: write # upload SARIF to the Security tab
+
+    jobs:
+      contract-check:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v4
+
+          - uses: actions/setup-node@v4
+            with:
+              node-version: 22
+
+          - run: npm ci
+
+          - name: Start the backend
+            run: npm run start:api > api.log 2>&1 &
+
+          - name: Start the Schema-Watch proxy
+            run: npx --yes schema-watch start > schema-watch.log 2>&1 &
+
+          - name: Wait for the proxy and backend
+            run: npx --yes wait-on --timeout 60000 http-get://localhost:4560/api/session
+
+          - name: Exercise the API through the proxy
+            env:
+              API_BASE_URL: http://localhost:4560
+            run: bash scripts/contract-smoke.sh
+
+          - run: npx schema-watch export --out contract.json
+
+          - name: Check the contract
+            env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            run: |
+              npx schema-watch check \
+                --contract contract.json \
+                --baseline .schema-watch/baseline.json \
+                --frontend-src web/src \
+                --sarif schema-watch.sarif
+
+          - name: Upload SARIF
+            if: always()
+            uses: github/codeql-action/upload-sarif@v3
+            with:
+              sarif_file: schema-watch.sarif
+
+          - name: Keep logs and the captured contract
+            if: failure()
+            uses: actions/upload-artifact@v4
+            with:
+              name: schema-watch-debug
+              path: |
+                contract.json
+                api.log
+                schema-watch.log
+    ```
+
+    `wait-on` polls the URL until it responds. Use any endpoint that returns a
+    success status without authentication. Polling through port 4560 proves
+    that both the proxy and the backend are up.
+  </Step>
+
+  <Step title="Require the check before merging">
+    Open a pull request so the workflow runs once. Then, in **Settings →
+    Branches → Branch protection rules**, add or edit the rule for your
+    default branch, enable **Require status checks to pass before merging**,
+    and select the check named **schema-watch**.
+  </Step>
+</Steps>
+
+## What a failing pull request shows
+
+When the check finds a breaking change, three things happen:
+
+- **The job fails** with the same report you saw locally:
+
+  ```console
+  BREAKING  GET /api/users/:id (response)
+      id: string → number
+      email was removed (was string)
+      affects: web/src/user.js
+
+  Breaking API contract changes detected.
+  ```
+
+- **A comment appears on the pull request** listing the changed endpoints and
+  affected files. On later pushes, Schema-Watch edits the same comment instead
+  of adding a new one.
+- **Code scanning alerts appear** in the **Security** tab, anchored to the
+  affected frontend files, because the SARIF upload runs even when the check
+  fails.
+
+## Accept an intentional change
+
+Sometimes a breaking change is the plan. To accept it, update the baseline in
+the same pull request, so reviewers see the contract change next to the code
+that caused it:
+
+```bash
+# with your updated backend running behind `schema-watch start`
+bash scripts/contract-smoke.sh
+npx schema-watch export --out .schema-watch/baseline.json
+git add .schema-watch/baseline.json
+git commit -m "Update API contract baseline: users.id is now a number"
+```
+
+<Tip>
+  Treat a baseline change like a database migration. It deserves its own
+  commit and a reviewer who owns the consuming clients.
+</Tip>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="check exits 2: No contract captured yet - nothing to check">
+    No request reached the proxy before `export`. Confirm that your tests use
+    `http://localhost:4560`, not the backend port, and that the
+    `Wait for the proxy and backend` step succeeded. The uploaded
+    `schema-watch.log` shows whether the proxy started.
+  </Accordion>
+  <Accordion title="check exits 2: Contract file not found">
+    `.schema-watch/baseline.json` is not committed, or the job runs from a
+    different directory. Commit the baseline and check the path.
+  </Accordion>
+  <Accordion title="The check passes, but an endpoint you changed was not reported">
+    The endpoint was not exercised in CI, so it is not in `contract.json`.
+    Add a call to your smoke script or tests. Compare the endpoints in
+    `contract.json` with those in the baseline to find gaps.
+  </Accordion>
+  <Accordion title="No affects: lines appear in the report">
+    `--frontend-src` points at a folder that does not exist in the checkout.
+    Schema-Watch skips the scan silently in that case. Use a path relative to
+    the repository root.
+  </Accordion>
+  <Accordion title="No comment appears on the pull request">
+    The workflow is missing `pull-requests: write`, or it ran on an event
+    other than `pull_request`. Comments are only posted for pull requests.
+    Workflows triggered from forks also receive a read-only token.
+  </Accordion>
+  <Accordion title="The SARIF upload step fails with a permissions error">
+    Add `security-events: write` to the workflow permissions. Private
+    repositories also need GitHub code scanning to be available on the plan.
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+- [CLI reference](/reference/cli) for every `check` flag and exit code.
+- The [Schema-Watch repository](https://github.com/HenryMorganDibie/schema-watch)
+  runs this check on itself. Its open pull request #1 is a deliberate contract
+  break you can inspect.

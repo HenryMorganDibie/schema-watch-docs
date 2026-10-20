@@ -1,15 +1,17 @@
 ---
 title: Changelog
-description: Record product changes that alter how readers use the documented experience.
+description: Changes to Schema-Watch that affect how you install, run, or configure it.
 ---
 
 ## v0.1.0
 
-The first published version of this documentation.
+The first public release of the `schema-watch` npm package.
 
-- A task-focused introduction and quickstart
-- Browsable API documentation generated from `openapi.yaml`
-- Agent-readable discovery files and a read-only MCP endpoint
-
-Replace this entry with changes your readers need to understand. Lead with the
-impact, then link to the guide or reference that explains the new behavior.
+- Local reverse proxy and live dashboard (`schema-watch start`).
+- Shape diffing for type changes, removed fields, nullability, optional to
+  required changes, and array item shapes, with direction-aware severity.
+- Affected frontend file detection.
+- CI contract checks against a committed baseline, with pull request comments,
+  check runs, and SARIF output. See
+  [Block breaking API changes in GitHub Actions](/guides/ci-contract-check).
+- AI context briefs (`schema-watch context`).

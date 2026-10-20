@@ -1,47 +1,233 @@
 ---
 title: Quickstart
-description: Guide a new reader through one useful workflow and show them how to verify it.
+description: Capture an API contract, ship a breaking change, and watch Schema-Watch catch it, in about five minutes.
 ---
 
-A strong quickstart produces one meaningful result. Replace the placeholders
-below with the shortest supported path for your product.
+In this quickstart you run a tiny API, put Schema-Watch in front of it, record
+its contract as a baseline, then change the API in a breaking way. At the end
+you will have seen the exact report your CI pipeline produces, and you will
+know how to point Schema-Watch at your own backend.
 
 ## Before you begin
 
-List only the requirements needed for this workflow:
+- **Node.js 22.5 or newer.** Check with `node --version`.
+- **Two free local ports, 4560 and 4561**, plus port 3001 for the sample API.
+- A terminal you can split into two panes, or two terminal windows.
 
-- An account or credential, when required
-- A supported runtime, device, browser, or operating system
-- Permission to create or change the resource used in the example
+You do not need an account, an API key, or an existing project.
 
 <Steps>
-  <Step title="Install the required tool">
-    Give readers one recommended installation command.
+  <Step title="Create a sample API">
+    Make an empty folder and add a file named `api.mjs`. The API returns a user
+    record. Setting `V2=1` switches it to a new, breaking version of the same
+    response.
 
     ```bash
-    npm install your-package
+    mkdir schema-watch-demo && cd schema-watch-demo
     ```
-  </Step>
-  <Step title="Add the minimum configuration">
-    Include only the values needed for the first successful run.
+
+    ```js api.mjs
+    import http from 'node:http'
+
+    const v2 = process.env.V2 === '1'
+
+    http
+      .createServer((req, res) => {
+        res.setHeader('content-type', 'application/json')
+        if (req.url.startsWith('/api/users/')) {
+          const id = req.url.split('/').pop()
+          const body = v2
+            ? { id: Number(id), name: 'Ada' }
+            : { id, name: 'Ada', email: 'ada@example.com' }
+          res.end(JSON.stringify(body))
+        } else {
+          res.statusCode = 404
+          res.end('{}')
+        }
+      })
+      .listen(3001, () => console.log(v2 ? 'API v2 on :3001' : 'API v1 on :3001'))
+    ```
+
+    Start version 1 in your first terminal and leave it running:
 
     ```bash
-    your-cli init
+    node api.mjs
     ```
   </Step>
-  <Step title="Complete the first task">
-    Use a realistic example that produces an observable result.
+
+  <Step title="Initialize Schema-Watch">
+    In a second terminal, in the same folder, create a configuration that
+    points at the API:
 
     ```bash
-    your-cli start
+    npx schema-watch init --target http://localhost:3001
     ```
+
+    This writes `schema-watch.config.json`:
+
+    ```json schema-watch.config.json
+    {
+      "target": "http://localhost:3001",
+      "proxyPort": 4560,
+      "apiPort": 4561,
+      "dbPath": "./schema-watch.db",
+      "frontendSrcDir": "../my-frontend/src",
+      "sync": { "enabled": false }
+    }
+    ```
+
+    `frontendSrcDir` is a placeholder. You will set it to a real folder in the
+    last step.
   </Step>
-  <Step title="Verify the result">
-    State exactly what the reader should see and how to recover when it does not appear.
+
+  <Step title="Start the proxy">
+    ```bash
+    npx schema-watch start
+    ```
+
+    You should see:
+
+    ```console
+    schema-watch is watching.
+
+      Proxy:      http://localhost:4560  →  http://localhost:3001
+      Dashboard:  http://localhost:4561
+      Database:   ./schema-watch.db
+    ```
+
+    Leave it running. From now on, send requests to port **4560** instead of
+    3001.
+  </Step>
+
+  <Step title="Record a baseline contract">
+    In a third terminal, send traffic through the proxy, then export what it
+    captured:
+
+    ```bash
+    curl http://localhost:4560/api/users/42
+    mkdir -p .schema-watch
+    npx schema-watch export --out .schema-watch/baseline.json
+    ```
+
+    Expected output:
+
+    ```console
+    {"id":"42","name":"Ada","email":"ada@example.com"}
+    Wrote 1 contract entries to .schema-watch/baseline.json
+    ```
+
+    Open the file. Note that `/api/users/42` was recorded as the pattern
+    `/api/users/:id`, and that each field records only its type, nullability,
+    and whether it is required. No values are stored.
+
+    <Tip>
+      In a real project, commit `.schema-watch/baseline.json`. It is the
+      contract your CI checks every pull request against.
+    </Tip>
+  </Step>
+
+  <Step title="Ship a breaking change">
+    Stop the API in the first terminal with <kbd>Ctrl</kbd>+<kbd>C</kbd>, then
+    start version 2:
+
+    ```bash
+    V2=1 node api.mjs
+    ```
+
+    Send the same request through the proxy:
+
+    ```bash
+    curl http://localhost:4560/api/users/42
+    ```
+
+    The response is now `{"id":42,"name":"Ada"}`. The `id` became a number and
+    `email` disappeared. Open [http://localhost:4561](http://localhost:4561):
+    the dashboard shows a **BREAKING** alert for `GET /api/users/:id` with both
+    changes listed.
+  </Step>
+
+  <Step title="Check the new contract against the baseline">
+    Export the current contract and compare it with the baseline. This is the
+    same command your CI pipeline runs.
+
+    ```bash
+    npx schema-watch export --out contract.json
+    npx schema-watch check --contract contract.json --baseline .schema-watch/baseline.json
+    echo "exit code: $?"
+    ```
+
+    ```console
+    BREAKING  GET /api/users/:id (response)
+        id: string → number
+        email was removed (was string)
+
+    Breaking API contract changes detected.
+    exit code: 1
+    ```
+
+    Exit code `1` is what fails a CI job.
+  </Step>
+
+  <Step title="See which frontend files break">
+    Schema-Watch can scan your frontend source for code that calls a changed
+    endpoint. Create a one-line client:
+
+    ```bash
+    mkdir -p web/src
+    echo 'export const getUser = (id) => fetch(`/api/users/${id}`).then((r) => r.json())' > web/src/user.js
+    ```
+
+    Run the check again with `--frontend-src`:
+
+    ```bash
+    npx schema-watch check --contract contract.json \
+      --baseline .schema-watch/baseline.json \
+      --frontend-src web/src
+    ```
+
+    The report now ends each breaking endpoint with `affects: web/src/user.js`.
+    To make this permanent for the dashboard too, set `frontendSrcDir` in
+    `schema-watch.config.json` to your real frontend `src` folder.
   </Step>
 </Steps>
 
-## Choose the next task
+## Use it with your own app
 
-Link to the guide that naturally follows this result. Avoid ending the reader’s
-journey with a generic list of every feature.
+1. Run `npx schema-watch init --target <your API base URL>` in your project.
+2. Change your frontend's API base URL to `http://localhost:4560`. In most
+   frameworks this is one environment variable, such as `VITE_API_URL` or
+   `NEXT_PUBLIC_API_URL`.
+3. Run `npx schema-watch start` and use your app normally. Every endpoint you
+   exercise is now under contract.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Export says: No contract captured yet">
+    Nothing has passed through the proxy. Requests sent directly to your API
+    port bypass Schema-Watch. Send at least one request to port 4560, then
+    export again.
+  </Accordion>
+  <Accordion title="start fails with EADDRINUSE on port 4560 or 4561">
+    Another process, often a previous `schema-watch start`, holds the port.
+    Stop it, or change `proxyPort` and `apiPort` in `schema-watch.config.json`.
+  </Accordion>
+  <Accordion title="The proxy returns: upstream request failed, ECONNREFUSED">
+    The proxy is running but your API is not reachable at `target`. Start the
+    API, or correct `target` in `schema-watch.config.json`.
+  </Accordion>
+  <Accordion title="check exits with code 2: Contract file not found">
+    The path given to `--contract` or `--baseline` does not exist relative to
+    the current directory. Exit code `2` means a usage or input error, not a
+    contract break.
+  </Accordion>
+  <Accordion title="A warning says SQLite is an experimental feature">
+    Node.js prints this when the built-in `node:sqlite` module loads. It is
+    expected and harmless.
+  </Accordion>
+</AccordionGroup>
+
+## Next step
+
+Turn the comparison you just ran into a required pull request check:
+[Block breaking API changes in GitHub Actions](/guides/ci-contract-check).
