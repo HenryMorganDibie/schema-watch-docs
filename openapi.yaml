@@ -1,0 +1,276 @@
+openapi: 3.1.0
+info:
+  title: Schema-Watch local dashboard API
+  version: 0.1.0
+  description: >-
+    The read API behind the Schema-Watch dashboard. `schema-watch start` serves
+    it on the dashboard port (4561 by default) under `/api`. It runs on your
+    machine, needs no authentication, and only lists what the local proxy has
+    captured. Use it to script around detected changes, for example to post
+    them to chat or to acknowledge them in bulk.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+  - url: http://localhost:4561/api
+    description: Default local dashboard port
+tags:
+  - name: Endpoints
+    description: Endpoints the proxy has seen.
+  - name: Changes
+    description: Contract changes detected between successive responses.
+  - name: Health
+    description: Liveness.
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Check that the dashboard API is running
+      description: Returns `ok` when the agent is up. Useful as a readiness probe in scripts and CI.
+      responses:
+        "200":
+          description: The agent is running.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+              example:
+                ok: true
+  /endpoints:
+    get:
+      operationId: listEndpoints
+      tags: [Endpoints]
+      summary: List captured endpoints
+      description: >-
+        Every endpoint the proxy has seen, keyed by method and path pattern.
+        Concrete paths such as `/api/users/42` are grouped as `/api/users/:id`.
+      responses:
+        "200":
+          description: Captured endpoints, with the most severe recent change.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Endpoint"
+              example:
+                - id: 5cd306a4-890b-484d-8711-0983e689cd0f
+                  method: GET
+                  pathPattern: /api/users/:id
+                  lastSeenAt: "2026-10-20T09:49:48.442Z"
+                  latestSeverity: BREAKING
+                  changeCount: 1
+  /changes:
+    get:
+      operationId: listChanges
+      tags: [Changes]
+      summary: List detected changes
+      description: All detected changes across every endpoint, newest first.
+      responses:
+        "200":
+          description: Detected changes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChangeEvent"
+              example:
+                - id: 388e088d-cd62-4d38-bbec-3eaaa3c60b0a
+                  endpointId: 5cd306a4-890b-484d-8711-0983e689cd0f
+                  method: GET
+                  pathPattern: /api/users/:id
+                  severity: BREAKING
+                  target: response
+                  changes:
+                    - kind: type-changed
+                      path: id
+                      severity: BREAKING
+                      before: string
+                      after: number
+                    - kind: field-removed
+                      path: email
+                      severity: BREAKING
+                      before: string
+                  affectedFiles: [web/src/user.js]
+                  acknowledged: false
+                  createdAt: "2026-10-20T09:49:48.444Z"
+  /endpoints/{endpointId}/changes:
+    get:
+      operationId: listEndpointChanges
+      tags: [Changes]
+      summary: List changes for one endpoint
+      parameters:
+        - $ref: "#/components/parameters/EndpointId"
+      responses:
+        "200":
+          description: Detected changes for the endpoint, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChangeEvent"
+              examples:
+                breaking:
+                  summary: A breaking response change
+                  value:
+                    - id: 388e088d-cd62-4d38-bbec-3eaaa3c60b0a
+                      endpointId: 5cd306a4-890b-484d-8711-0983e689cd0f
+                      method: GET
+                      pathPattern: /api/users/:id
+                      severity: BREAKING
+                      target: response
+                      changes:
+                        - kind: type-changed
+                          path: id
+                          severity: BREAKING
+                          before: string
+                          after: number
+                        - kind: field-removed
+                          path: email
+                          severity: BREAKING
+                          before: string
+                      affectedFiles: [web/src/user.js]
+                      acknowledged: false
+                      createdAt: "2026-10-20T09:49:48.444Z"
+        "404":
+          description: No endpoint has this ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: endpoint not found
+  /endpoints/{endpointId}/changes/{changeId}/ack:
+    post:
+      operationId: acknowledgeChange
+      tags: [Changes]
+      summary: Acknowledge a change
+      description: >-
+        Marks a change as acknowledged so the dashboard stops highlighting it.
+        The change stays in the history.
+      parameters:
+        - $ref: "#/components/parameters/EndpointId"
+        - name: changeId
+          in: path
+          required: true
+          description: The `id` of a change from `/changes`.
+          schema:
+            type: string
+            format: uuid
+          example: 388e088d-cd62-4d38-bbec-3eaaa3c60b0a
+      responses:
+        "204":
+          description: The change is acknowledged. No body is returned.
+components:
+  parameters:
+    EndpointId:
+      name: endpointId
+      in: path
+      required: true
+      description: The `id` of an endpoint from `/endpoints`.
+      schema:
+        type: string
+        format: uuid
+      example: 5cd306a4-890b-484d-8711-0983e689cd0f
+  schemas:
+    Severity:
+      type: string
+      enum: [BREAKING, WARNING, INFO]
+      description: How likely the change is to break a caller.
+    Endpoint:
+      type: object
+      required: [id, method, pathPattern, lastSeenAt, changeCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        method:
+          type: string
+          example: GET
+        pathPattern:
+          type: string
+          example: /api/users/:id
+        lastSeenAt:
+          type: string
+          format: date-time
+        latestSeverity:
+          oneOf:
+            - $ref: "#/components/schemas/Severity"
+            - type: "null"
+          description: Severity of the most recent change, or null when none was detected.
+        changeCount:
+          type: integer
+          minimum: 0
+    FieldChange:
+      type: object
+      required: [kind, path, severity]
+      properties:
+        kind:
+          type: string
+          enum:
+            - field-removed
+            - field-added
+            - type-changed
+            - became-nullable
+            - became-non-nullable
+            - required-to-optional
+            - optional-to-required
+        path:
+          type: string
+          description: Dotted path to the field, with `[]` for array items. `(root)` for the body itself.
+          example: items[].price
+        severity:
+          $ref: "#/components/schemas/Severity"
+        before:
+          type: string
+          description: Type signature before the change. Absent for added fields.
+        after:
+          type: string
+          description: Type signature after the change. Absent for removed fields.
+    ChangeEvent:
+      type: object
+      required: [id, endpointId, method, pathPattern, severity, target, changes, affectedFiles, acknowledged, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        endpointId:
+          type: string
+          format: uuid
+        method:
+          type: string
+        pathPattern:
+          type: string
+        severity:
+          $ref: "#/components/schemas/Severity"
+        target:
+          type: string
+          enum: [request, response]
+          description: Whether the request body or the response body changed.
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldChange"
+        affectedFiles:
+          type: array
+          items:
+            type: string
+          description: Frontend files that reference this endpoint, relative to `frontendSrcDir`.
+        acknowledged:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

@@ -1,0 +1,40 @@
+# Runs every command published in the docs against the real schema-watch
+# package. A failure means the docs and the CLI have drifted apart.
+name: verify-docs
+
+on:
+  pull_request:
+    paths:
+      - "src/content/**"
+      - "scripts/verify-docs.sh"
+      - ".github/workflows/verify-docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/content/**"
+      - "scripts/verify-docs.sh"
+  schedule:
+    # Weekly, so a new CLI release that changes documented output is caught
+    # even when nobody touches the docs.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Docs match the CLI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Run the quickstart and CI guide commands
+        run: bash scripts/verify-docs.sh latest

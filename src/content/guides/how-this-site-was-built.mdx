@@ -164,8 +164,12 @@ Then replace the navigation in `docs.json`. Page entries are paths under
 ```
 
 Delete the starter pages you are not keeping (`components.mdx`,
-`customization.mdx`, the sample guides, and `api/`). If your product has no
-HTTP API, also delete `openapi.yaml`. See the obstacles section for why.
+`customization.mdx`, and the sample guides). Replace the sample `openapi.yaml`
+with your own specification rather than deleting it; the obstacles section
+explains why. Schema-Watch's dashboard serves a small local JSON API, so I
+captured real responses from it and wrote a specification with those
+responses as examples. Thally generated one page per operation, grouped by
+the spec's `tags`.
 
 ## Step 5: Write the content
 
@@ -212,7 +216,45 @@ Three habits made the content better than the README it replaced:
    and proxy, waits for both, then exercises the API. Writing a guide you have
    to make work is a review of the product.
 
-## Step 6: Validate and build
+## Step 6: Make the docs test themselves
+
+Running commands once while writing proves the docs were right on the day
+they were written. To keep them right, I added
+`scripts/verify-docs.sh`, which replays every published command against the
+real npm package: the quickstart, its troubleshooting errors, the local API,
+and the CI guide's workflow. It checks 36 documented outputs and exit codes.
+
+A GitHub Actions workflow, `.github/workflows/verify-docs.yml`, runs it on
+every pull request that touches content, on Node.js 22 and 24, and every
+Monday. When a CLI release changes an output the docs quote, the job fails
+before a reader hits the difference.
+
+```yaml .github/workflows/verify-docs.yml
+on:
+  pull_request:
+    paths: ["src/content/**", "scripts/verify-docs.sh"]
+  schedule:
+    - cron: "17 6 * * 1"
+jobs:
+  verify:
+    strategy:
+      matrix:
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: bash scripts/verify-docs.sh latest
+```
+
+I also used two Thally features that measure the docs from an AI agent's
+point of view. Adding `lastVerified` frontmatter to tested pages and a set of
+`readiness.goldenQuestions` in `docs.json` (questions the site's search must
+answer with the right page) took the agent readiness score from 89 on the
+starter to 100.
+
+## Step 7: Validate and build
 
 Thally ships a content linter. Run it with a production build before every
 push:
@@ -235,7 +277,7 @@ curl -s "http://localhost:3040/quickstart?format=md" | head
 curl -s http://localhost:3040/llms.txt | head
 ```
 
-## Step 7: Publish
+## Step 8: Publish
 
 Commit and push to the production branch connected in Thally Cloud:
 
@@ -267,9 +309,12 @@ variable. A permanent fix is to self-host the fonts with `next/font/local`.
 **Removing the API tab did not remove the sample API.** I deleted the API
 Reference tab from `docs.json`, but the starter's `openapi.yaml` (a sample
 "Posts API") was still published at `/openapi.yaml` and advertised in
-`llms.txt`. For a CLI with no HTTP API, that is misleading to both readers and
-AI agents. Deleting `openapi.yaml` fixed it. Thally then serves a generated
-spec for the documentation site's own read-only API at the same path.
+`llms.txt`, which is misleading to both readers and AI agents. Deleting the
+file fixed that, but then the starter's own test suite failed: a
+runtime-owned test (`doc-route-static-params`) expects the API route to have
+at least one page. `src/lib/**` is managed by Thally, so editing the test was
+not an option. Documenting Schema-Watch's real local API resolved both
+problems and made the docs more useful.
 
 **Two different `check` commands.** The quickstart uses
 `npx @thallylabs/cli@latest check`, while the starter's `AGENTS.md` describes
@@ -306,6 +351,8 @@ The workflow that worked:
 3. Run every command you document, and turn every error you hit into a
    troubleshooting entry.
 4. Run `check` and `build` before every push, then verify the live URL.
+5. Put the published commands under test in CI, so the docs fail loudly when
+   the product changes.
 
 The result is a site I can maintain with ordinary pull requests, and one that
 AI agents can read as easily as people can.
