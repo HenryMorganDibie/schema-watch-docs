@@ -159,7 +159,7 @@ const brandPresets: Record<BrandPresetKey, BrandConfig> = {
 
 const brandPreset: BrandPresetKey = 'primary'
 
-export const siteConfig: SiteConfig = {
+const templateSiteConfig: SiteConfig = {
   name: 'Documentation',
   description:
     'Clear, task-focused guidance for building with the product.',
@@ -172,3 +172,17 @@ export const siteConfig: SiteConfig = {
   brandPreset,
   brandPresets,
 }
+
+// Managed by Thally Cloud onboarding.
+export const siteConfig: SiteConfig = {
+  ...templateSiteConfig,
+  name: "Schema-Watch",
+  description: "Schema-Watch documentation",
+  repoUrl: "https://github.com/HenryMorganDibie/schema-watch-docs",
+  links: [
+    { label: "Get started", href: "/quickstart" },
+    { label: "Support", href: "https://github.com/HenryMorganDibie/schema-watch-docs/issues/new" },
+    { label: "GitHub", href: "https://github.com/HenryMorganDibie/schema-watch-docs" },
+    { label: "Changelog", href: "/changelog" },
+  ],
+};
