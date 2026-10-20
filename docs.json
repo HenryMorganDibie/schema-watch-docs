@@ -43,6 +43,12 @@
           "pages": [
             "reference/cli"
           ]
+        },
+        {
+          "group": "About these docs",
+          "pages": [
+            "guides/how-this-site-was-built"
+          ]
         }
       ]
     },

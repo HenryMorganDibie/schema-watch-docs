@@ -1,0 +1,311 @@
+---
+title: How I documented a CLI with Thally in an afternoon
+description: A step-by-step guide to building and publishing a documentation site like this one with Thally, including the obstacles and how I resolved them.
+---
+
+I maintain [Schema-Watch](https://github.com/HenryMorganDibie/schema-watch), an
+open-source CLI that catches breaking API contract changes before they reach a
+frontend. Its README had grown into a wall of text, so I moved the docs to
+[Thally](https://docs.thally.io). This article walks through the same path so
+you can build a comparable site for your own project: prerequisites, setup,
+configuration, writing the content, and publishing, plus the problems I hit
+and how I resolved them.
+
+The finished site: **https://schema-watch.thally.app**
+The source: **https://github.com/HenryMorganDibie/schema-watch-docs**
+
+## What you will build
+
+A four-page documentation site:
+
+| Page | Job |
+| --- | --- |
+| Introduction | What the tool does, who it is for, what it catches |
+| Quickstart | One useful result in about five minutes, with expected output |
+| Guide | A real workflow (for me, a GitHub Actions gate) with troubleshooting |
+| CLI reference | Every command, flag, and exit code |
+
+Thally builds this into a Next.js site and also publishes each page as
+Markdown and JSON, plus `llms.txt`, a search index, and a read-only MCP
+endpoint, all from the same MDX source. You do not configure any of that.
+
+## Prerequisites
+
+- **A GitHub account** with permission to install a GitHub App on the account
+  that will own the docs repository.
+- **A Thally Cloud account** at [app.thally.io](https://app.thally.io). A new
+  workspace gets a one-time 7-day trial when you first publish.
+- **Node.js 22 and Git**, for editing and previewing locally. You do not need
+  them to publish the starter site, only to change it.
+- **A project you know well.** The writing is the hard part. Pick something
+  where you can run every command yourself.
+
+## Step 1: Create the site in Thally Cloud
+
+Thally's recommended path starts in the browser, not the terminal.
+
+1. Open [app.thally.io](https://app.thally.io), sign in, and choose
+   **Create a site**.
+2. Enter a site name, a short description, and the `thally.app` address you
+   want. Thally checks that the address is free.
+3. At **Docs source**, choose **Create a new docs repository**. Thally creates
+   a GitHub repository from its starter template and manages the first
+   deployment.
+4. Install the Thally GitHub App when prompted. For the new-repository path,
+   grant it **All repositories** so it can initialize the repository it
+   creates. If your organization only allows selected repositories, you need
+   an existing Thally repository instead.
+5. At **Product sources**, choose **I'll do this later**. This is for Thally
+   Track, which watches product repositories for changes. It is not needed for
+   a first site.
+6. Review the settings and select **Publish site**.
+
+When the workspace Home page shows the site as **Live**, open it from the site
+summary. You now have the starter content at `https://<your-site>.thally.app`.
+
+The first deployment took about two minutes. Two things in the wizard are
+worth knowing in advance:
+
+- **Pick a repository name that does not clash with your code.** Thally
+  suggested `schema-watch`, which is my product repository. I named the docs
+  repository `schema-watch-docs` and made it public so others can read the
+  source.
+- **On a phone, the GitHub App step is easy to miss.** The pinned footer with
+  the disabled Continue button covers the **Install app** button. Scroll, or
+  switch to the desktop layout.
+
+I connected `schema-watch` as a product source so Track can propose doc
+updates when CLI changes merge, and skipped Knowledge surfaces. Once the site
+was live, the Home page offered a **Generate docs** button that drafts
+documentation from the connected repository. I did not use it, because I
+wanted to write and test every page myself.
+
+## Step 2: Clone the repository and preview it
+
+The site summary links to the GitHub repository Thally created.
+
+```bash
+git clone https://github.com/<you>/<your-docs-repo>.git
+cd <your-docs-repo>
+npm install
+npm run dev
+```
+
+The dev server runs on [http://localhost:3040](http://localhost:3040).
+
+If you want to try Thally before creating a Cloud site, the CLI scaffolds the
+same starter locally:
+
+```bash
+npx --yes create-thally-docs@latest my-docs --yes --install
+cd my-docs
+npm run dev
+```
+
+I used this first to draft content offline, then moved the files into the
+Cloud-created repository.
+
+## Step 3: Understand the three files that matter
+
+The starter is a full Next.js application with a lot of files, and the
+`AGENTS.md` at the root marks most of them as machine-managed. You edit three
+things:
+
+| Path | What it controls |
+| --- | --- |
+| `src/content/**/*.mdx` | Pages. The file path is the URL. |
+| `docs.json` | Tabs, sidebar groups, and page order |
+| `src/data/site.ts` | Site name, description, links, and brand colors |
+
+Leave everything else alone. Framework updates arrive as pull requests from a
+scheduled **Update Thally framework** workflow, and hand edits to runtime files
+would conflict with them.
+
+## Step 4: Configure the site
+
+In `src/data/site.ts`, find the `siteConfig` object at the bottom. In a
+Cloud-created repository it spreads the template defaults and sets your
+identity on top. Keep the spread and change only the values:
+
+```ts
+// Managed by Thally Cloud onboarding.
+export const siteConfig: SiteConfig = {
+  ...templateSiteConfig,
+  name: "Schema-Watch",
+  description: "Catch breaking API contract changes before they reach your frontend, locally and in CI.",
+  repoUrl: "https://github.com/HenryMorganDibie/schema-watch-docs",
+  links: [
+    { label: "Quickstart", href: "/quickstart" },
+    { label: "GitHub", href: "https://github.com/HenryMorganDibie/schema-watch" },
+    { label: "npm", href: "https://www.npmjs.com/package/schema-watch" },
+    { label: "Changelog", href: "/changelog" },
+  ],
+};
+```
+
+The name and description flow into the page titles, Open Graph images, and
+`llms.txt`.
+
+Then replace the navigation in `docs.json`. Page entries are paths under
+`src/content` without the `.mdx` extension:
+
+```json
+"tabs": [
+  {
+    "tab": "Documentation",
+    "groups": [
+      { "group": "Get started", "pages": ["introduction", "quickstart"] },
+      { "group": "Guides", "pages": ["guides/ci-contract-check"] },
+      { "group": "Reference", "pages": ["reference/cli"] }
+    ]
+  },
+  { "tab": "Changelog", "href": "/changelog" }
+]
+```
+
+Delete the starter pages you are not keeping (`components.mdx`,
+`customization.mdx`, the sample guides, and `api/`). If your product has no
+HTTP API, also delete `openapi.yaml`. See the obstacles section for why.
+
+## Step 5: Write the content
+
+Every page needs `title` and `description` frontmatter. The body is MDX, and
+Thally ships components that are compatible with Mintlify's, so `Steps`,
+`Tabs`, `Accordion`, `CardGroup`, `Tip`, `Info`, and `Warning` all work.
+
+Here is the shape of one quickstart step:
+
+````mdx
+<Steps>
+  <Step title="Record a baseline contract">
+    Send traffic through the proxy, then export what it captured:
+
+    ```bash
+    curl http://localhost:4560/api/users/42
+    npx schema-watch export --out .schema-watch/baseline.json
+    ```
+
+    Expected output:
+
+    ```console
+    Wrote 1 contract entries to .schema-watch/baseline.json
+    ```
+  </Step>
+</Steps>
+````
+
+Code fences accept a filename after the language (` ```json schema-watch.config.json `),
+which renders as a titled code block.
+
+Three habits made the content better than the README it replaced:
+
+1. **I ran every command before writing it down.** My quickstart builds a
+   20-line sample API, so a reader needs no existing project. Running it end
+   to end surfaced four real error messages (a port already in use, an empty
+   export, an unreachable upstream, a missing baseline file). Each one became
+   a troubleshooting entry with the exact text the reader will see.
+2. **Every step states what success looks like.** Each step ends with the
+   expected output or an observable result, so readers know when to continue.
+3. **Testing the docs found a bug in the product's own example.** The GitHub
+   Actions example in my repository ran the test suite without starting the
+   proxy, so it would capture nothing. The guide's workflow starts the backend
+   and proxy, waits for both, then exercises the API. Writing a guide you have
+   to make work is a review of the product.
+
+## Step 6: Validate and build
+
+Thally ships a content linter. Run it with a production build before every
+push:
+
+```bash
+npx --yes @thallylabs/cli@latest check
+npm run build
+```
+
+`check` reports broken navigation entries, missing frontmatter, and invalid
+MDX. On my content it returned `No issues found` on the first run after I
+deleted the unused starter pages.
+
+Then preview the production build and spot-check every page, including the
+machine-readable versions:
+
+```bash
+npm run start
+curl -s "http://localhost:3040/quickstart?format=md" | head
+curl -s http://localhost:3040/llms.txt | head
+```
+
+## Step 7: Publish
+
+Commit and push to the production branch connected in Thally Cloud:
+
+```bash
+git add -A
+git commit -m "Document Schema-Watch: introduction, quickstart, CI guide, CLI reference"
+git push origin main
+```
+
+The push triggers a managed deployment, and the deployment history in Thally
+Cloud records the commit. When it finishes, load the live URL and confirm the
+new content is there, not the starter.
+
+My content push was live within about five minutes, and the pages matched
+the local production build. There is no deployment record on the GitHub
+commit, so follow progress on the **Deployments** page in Thally Cloud.
+
+## Obstacles and how I resolved them
+
+**The build failed in a network-restricted environment.** The starter loads
+Inter and JetBrains Mono through `next/font/google`, which downloads the fonts
+from `fonts.googleapis.com` at build time. In a sandbox without that access,
+`npm run build` fails with `Failed to fetch Inter from Google Fonts`. Thally
+Cloud's builders have network access, so this does not affect publishing, but
+it will affect locked-down CI runners. For a local check I pointed Next.js at
+canned font responses with the `NEXT_FONT_GOOGLE_MOCKED_RESPONSES` environment
+variable. A permanent fix is to self-host the fonts with `next/font/local`.
+
+**Removing the API tab did not remove the sample API.** I deleted the API
+Reference tab from `docs.json`, but the starter's `openapi.yaml` (a sample
+"Posts API") was still published at `/openapi.yaml` and advertised in
+`llms.txt`. For a CLI with no HTTP API, that is misleading to both readers and
+AI agents. Deleting `openapi.yaml` fixed it. Thally then serves a generated
+spec for the documentation site's own read-only API at the same path.
+
+**Two different `check` commands.** The quickstart uses
+`npx @thallylabs/cli@latest check`, while the starter's `AGENTS.md` describes
+installing tooling under `.github/thally-tooling` and running
+`thally check --ci .`. Both validate content. I used the quickstart's form
+locally because it needs no setup.
+
+**The local scaffold uses `master`.** `create-thally-docs` initializes Git with
+your machine's default branch, which was `master` for me. The Cloud-created
+repository uses its own production branch. If you draft locally first, copy
+your content into the Cloud repository rather than pushing the scaffold's
+history.
+
+**The Cloud repository's `site.ts` differs from the local scaffold.** Both come
+from the same starter release, but Thally Cloud rewrites `siteConfig` as a
+`...templateSiteConfig` spread marked "Managed by Thally Cloud onboarding".
+I had drafted content in a CLI scaffold, and copying its `siteConfig` block
+over the Cloud version removed the spread. `npm run build` then failed type
+checking because `brand`, `brandPreset`, and `brandPresets` were missing.
+The fix was to keep the spread and change only `description` and `links`.
+Edit the Cloud file in place rather than replacing it.
+
+**An empty wizard description overrides the repository.** I left the
+description blank in the wizard. After deploying, `llms.txt` showed an empty
+summary even though `site.ts` set one. Fill in the description during setup,
+or set it afterwards in **Site settings**.
+
+## Summary
+
+The workflow that worked:
+
+1. Create the site in Thally Cloud first, so hosting and the repository exist.
+2. Edit only `src/content`, `docs.json`, and `src/data/site.ts`.
+3. Run every command you document, and turn every error you hit into a
+   troubleshooting entry.
+4. Run `check` and `build` before every push, then verify the live URL.
+
+The result is a site I can maintain with ordinary pull requests, and one that
+AI agents can read as easily as people can.
