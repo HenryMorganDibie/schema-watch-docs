@@ -180,9 +180,9 @@ export const siteConfig: SiteConfig = {
   description: "Catch breaking API contract changes before they reach your frontend, locally and in CI.",
   repoUrl: "https://github.com/HenryMorganDibie/schema-watch-docs",
   links: [
-    { label: "Quickstart", href: "/quickstart" },
-    { label: "GitHub", href: "https://github.com/HenryMorganDibie/schema-watch" },
-    { label: "npm", href: "https://www.npmjs.com/package/schema-watch" },
+    { label: "Get started", href: "/quickstart" },
+    { label: "Support", href: "https://github.com/HenryMorganDibie/schema-watch-docs/issues/new" },
+    { label: "GitHub", href: "https://github.com/HenryMorganDibie/schema-watch-docs" },
     { label: "Changelog", href: "/changelog" },
   ],
 };
