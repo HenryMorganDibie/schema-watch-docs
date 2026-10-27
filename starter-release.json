@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "starterVersion": 2,
+  "starterVersion": 3,
   "repository": "thallylabs/starter",
   "defaultBranch": "main",
   "runtime": {
     "repository": "thallylabs/thally",
-    "commitSha": "8f80ea5712a97574ad3f86975301754c3a223912",
-    "treeSha": "e52a9c74d8a362e345c96e4097ce0631ede24157"
+    "commitSha": "2e0943562b12047c446a4e48c2a5570b0dd3de26",
+    "treeSha": "b826863b2077d4f87fbf757be5c5f6770edcb0b4"
   },
   "packages": {
     "@thallylabs/core": "^0.2.17"
