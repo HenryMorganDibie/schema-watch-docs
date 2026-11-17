@@ -5,13 +5,14 @@ import { getContentSource, isRemoteContentSource } from '@/lib/content-source'
 import { redirect } from 'next/navigation'
 import { ApiLayout } from '@/components/api/api-layout'
 import { OperationPanel } from '@/components/api/operation-panel'
+import { packValue } from '@/lib/openapi/pack-operation'
 import { resolvePlaygroundDisplay } from '@/lib/openapi/playground-display'
 import { JsonLdScript } from '@/components/seo/json-ld-script'
 import { getSiteUrl } from '@/lib/site-url'
 import { pageFullTitle } from '@/lib/page-meta'
 import { apiReferenceConfig, getOpenApiSpecUrl } from '@/config/api-reference'
 import { getAllApiOperationNodes, getApiOperationBySlug, getApiOperationNodes } from '@/data/api-reference'
-import { getApiPlaygroundDisplay, getApiSpecLinkVisible, getBreadcrumbs, getSeoConfig, getDocEntries, loadDocEntries } from '@/data/docs'
+import { getApiPlaygroundDisplay, getApiSpecLinkVisible, getContextualOptions, getBreadcrumbs, getSeoConfig, getDocEntries, loadDocEntries } from '@/data/docs'
 import { findDocSource, getIndexableDocTranslation, hasDocTranslation } from '@/lib/i18n/translation-source'
 import { buildAgentAlternateLinks } from '@/lib/agent-discovery'
 import { buildApiOperationJsonLd } from '@/lib/json-ld'
@@ -22,6 +23,8 @@ import {
   getRepositoryI18nConfig,
 } from '@/lib/i18n/request'
 import { resolveBuildSiteConfig } from '@/lib/site-config'
+import { agentServerName } from '@/lib/agent-identity'
+import { apiOperationMarkdown, describeApiOperation } from '@/lib/openapi/operation-projection'
 import DocsPage, { generateMetadata as generateDocsMetadata } from '@/app/(docs)/[[...slug]]/page'
 import { isReaderAuthActive } from '@/lib/reader-auth/config'
 import { getReaderContext } from '@/lib/reader-auth/context'
@@ -188,7 +191,7 @@ export default async function LocaleApiReferencePage({ params }: PageProps) {
           </p>
         ) : null}
         <JsonLdScript data={jsonLd} />
-        <OperationPanel operation={node.operation} showTitle playground={resolvePlaygroundDisplay(undefined, getApiPlaygroundDisplay())} />
+        <OperationPanel operation={packValue(node.operation)} pageActions={{ options: getContextualOptions(), serverName: agentServerName(effectiveSite.name), markdown: apiOperationMarkdown(describeApiOperation(node, siteUrl)) }} showTitle playground={resolvePlaygroundDisplay(undefined, getApiPlaygroundDisplay())} />
       </ApiLayout>
     </div>
   )
