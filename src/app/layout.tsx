@@ -4,6 +4,10 @@ import { Inter, JetBrains_Mono } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
 import '@/styles/docs-handoff.css'
+import '@/styles/docs-navigation-update.css'
+import '@/styles/docs-code-update.css'
+import '@/styles/docs-endpoint-update.css'
+import '@/styles/docs-try-it-update.css'
 import { Providers } from '@/app/providers'
 import { siteConfig } from '@/data/site'
 import {
@@ -31,7 +35,7 @@ import { SiteBanner } from '@/components/layout/site-banner'
 import { WebMcpTools } from '@/components/agent/web-mcp-tools'
 import { CloudHandshake } from '@/components/cloud/cloud-handshake'
 import { localeDirection } from '@/lib/i18n/config'
-import { getEffectiveI18nConfig } from '@/lib/i18n/request'
+import { getEffectiveI18nConfig, getDocumentLocale } from '@/lib/i18n/request'
 import { resolveBuildSiteConfig } from '@/lib/site-config'
 import { validMetatags } from '@/lib/metatags'
 import { getBuildSiteAppearance } from '@/lib/cloud-link/appearance'
@@ -273,6 +277,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const effectiveSite = resolveBuildSiteConfig()
   const siteUrl = getSiteUrl()
   const defaultLang = i18n.defaultLocale
+  const documentLang = await getDocumentLocale(i18n)
   const siteJsonLd = buildSiteJsonLd({
     siteUrl,
     siteName: effectiveSite.name,
@@ -286,8 +291,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     // globals.css --font-heading default and docs.json font overrides — can
     // reference and override them.
     <html
-      lang={defaultLang}
-      dir={localeDirection(defaultLang)}
+      lang={documentLang}
+      dir={localeDirection(documentLang)}
       suppressHydrationWarning
       data-theme={structuralTheme}
       data-content-icons={contentIconTone}

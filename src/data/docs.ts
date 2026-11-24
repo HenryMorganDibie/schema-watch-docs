@@ -131,17 +131,25 @@ export interface SidebarCollection {
   description?: string
   icon?: string
   sections: Array<NavigationSection>
+  /**
+   * Pages the tab lists but their frontmatter hides. They are not in `sections`,
+   * so no sidebar, pagination or machine listing shows them, yet the tab (and
+   * their authored `groupPath`) still owns them: opening one keeps this tab.
+   */
+  hiddenItems?: Array<NavigationItem>
   href?: string
   api?: DocsJsonApiConfig
 }
 
 export interface NavigationItem {
+  /** Request method from structured API metadata; never inferred from the label. */
+  method?: string
   id: string
   title: string
   href: string
+  /** Where the redirect from `href` ends, fragment included. `href` stays the page's identity; only the link follows this. */
+  redirectTo?: string
   badge?: string
-  /** HTTP method of the page's `openapi:` operation, shown as a pill in the sidebar. */
-  method?: string
   /** Sidebar icon from page frontmatter (name, or an image path/URL). */
   icon?: string
   iconType?: IconStyle
@@ -335,9 +343,11 @@ export interface DocsJsonConfig {
     shortcuts?: Array<DocsNavigationShortcut>
   }
   redirects?: Array<DocsJsonRedirect>
+  /** Mintlify `errors`: with `404.redirect` an address that has no page goes to the home page instead of the 404 page. */
+  errors?: { '404'?: { redirect?: boolean } }
   banner?: DocsJsonBanner
   navbar?: DocsJsonNavbar
-  /** Page-menu entries (`copy`, `view`, `chatgpt`, `claude`, `perplexity`) in display order. */
+  /** Page-menu entries (`copy`, `view`, `chatgpt`, `claude`, `perplexity`, `llms-full`, `mcp`, `cursor`, `vscode`) in display order. */
   contextual?: { options?: Array<string> }
   /** Hex brand colours per mode (six digits); `primary` fills buttons, `accent` links and highlights, `background` is the canvas. */
   colors?: Partial<Record<'light' | 'dark', { primary?: string; accent?: string; background?: string }>>
@@ -646,6 +656,132 @@ function servedRootHref(href: string): string {
     : href
 }
 
+/**
+ * The docs.json redirects as the lookup `redirectedHref` needs, in order:
+ * the first exact source for each path, and the literal start of every
+ * pattern source, each with its place in the list. A pattern that goes on with
+ * a required parameter (`/docs/:slug`) takes a whole path segment after its
+ * start, so it cannot match the start itself.
+ */
+interface RedirectIndex {
+  exact: Map<string, { index: number; destination: string }>
+  patterns: Array<{ index: number; prefix: string; requiresSegment: boolean }>
+}
+
+const redirectIndexes = new WeakMap<Array<DocsJsonRedirect>, RedirectIndex>()
+
+function redirectKey(path: string): string {
+  return (path.replace(/\/+$/, '') || '/').toLowerCase()
+}
+
+/**
+ * What a chain of redirects can change in a query. Next writes a destination's
+ * query back out without encoding it (`stringifyQuery`) and the next request
+ * parses that text again: `+` becomes a space, `%41` becomes `A`, `&` splits a
+ * pair (and `=` splits a name), and a tab or line break is dropped from the URL.
+ * A link cannot copy that, so a chain whose query holds one of these is left alone.
+ */
+const QUERY_VALUE_CHANGES = /[%+&\t\r\n]/
+const QUERY_NAME_CHANGES = /[%+&=\t\r\n]/
+
+/** The characters path-to-regexp, which Next matches redirect sources with, reads as syntax; any other is literal. */
+const REDIRECT_SYNTAX = /[:*+?(){}\\]/
+
+/** Whether a path, already keyed, may be matched by a pattern source: never false where Next would match. */
+function couldMatch(pattern: RedirectIndex['patterns'][number], key: string): boolean {
+  if (!pattern.requiresSegment) return key.startsWith(pattern.prefix)
+  return key.startsWith(`${pattern.prefix}/`) && key.length > pattern.prefix.length + 1
+}
+
+function redirectIndex(redirects: Array<DocsJsonRedirect>): RedirectIndex {
+  const cached = redirectIndexes.get(redirects)
+  if (cached) return cached
+  const index: RedirectIndex = { exact: new Map(), patterns: [] }
+  redirects.forEach(({ source, destination }, position) => {
+    const syntax = source.search(REDIRECT_SYNTAX)
+    if (syntax >= 0) {
+      // Everything a pattern matches starts with its literal text, whatever the case. A parameter owns
+      // the `/` or `.` before it and may be optional, so the start stops short of those delimiters.
+      // A required parameter owns only the `/` right before it: any literal text ahead of that stays.
+      const requiresSegment = source[syntax - 1] === '/' && /^:\w+\+?(?:\/|$)/.test(source.slice(syntax))
+      const literal = source.slice(0, syntax).toLowerCase()
+      index.patterns.push({
+        index: position,
+        prefix: requiresSegment ? literal.slice(0, -1) : literal.replace(/[/.]+$/, ''),
+        requiresSegment,
+      })
+    } else if (!index.exact.has(redirectKey(source))) {
+      // Next applies the first redirect whose source matches.
+      index.exact.set(redirectKey(source), { index: position, destination })
+    }
+  })
+  redirectIndexes.set(redirects, index)
+  return index
+}
+
+/**
+ * Where a visit to `href` ends: an exact docs.json redirect source leads to its
+ * destination, and a destination that is itself a source leads on. The Next.js
+ * client router drops the fragment of a redirect it follows, so a link has to
+ * name the final address. A destination the site cannot link to, or a loop,
+ * leaves the page's own route as the link.
+ *
+ * Next applies the first redirect, in docs.json order, whose source matches,
+ * and only exact sources are indexed here. A pattern source listed before the
+ * exact one that could match the path might be the redirect that applies
+ * instead, so the link is left alone: better its own route, which Next resolves,
+ * than a guess at where a pattern leads. The same holds at the end of a chain,
+ * where a pattern that could match the last address might lead on.
+ *
+ * Each hop passes the query it was reached with on to its destination, whose
+ * own query wins on a duplicate key (`{ ...request.query, ...destination.query }`
+ * in Next's `prepareDestination`), so the link carries the merged query. Past
+ * the first hop, a query Next would re-read differently (`QUERY_VALUE_CHANGES`)
+ * leaves the link alone.
+ */
+function redirectedHref(href: string): string | undefined {
+  const redirects = docsConfig().redirects
+  if (!redirects?.length) return undefined
+  const { exact, patterns } = redirectIndex(redirects)
+  let target: string | undefined
+  let fragment = ''
+  let path = href
+  // A map keeps a duplicate key where it first appeared, as the object spread in Next does.
+  const query = new Map<string, Array<string>>()
+  let rewritten = false
+  const visited = new Set<string>()
+  // A chain ends at an address outside the site; no redirect of this site applies to it.
+  while (!/^https?:\/\//i.test(path)) {
+    const key = redirectKey(path)
+    const hit = exact.get(key)
+    // An earlier pattern that could match the path might be the redirect that applies, and where it
+    // leads is unknown. With no exact source at all, any pattern could be the one that applies.
+    const before = hit?.index ?? Infinity
+    if (patterns.some((pattern) => pattern.index < before && couldMatch(pattern, key))) return undefined
+    if (!hit) break
+    const next = hit.destination
+    if (!/^(?:https?:\/\/|\/(?![/\\]))/i.test(next) || visited.has(key)) return undefined
+    visited.add(key)
+    const hash = next.indexOf('#')
+    const location = hash < 0 ? next : next.slice(0, hash)
+    const search = location.indexOf('?')
+    target = search < 0 ? location : location.slice(0, search)
+    const own = new Map<string, Array<string>>()
+    for (const [name, value] of new URLSearchParams(search < 0 ? '' : location.slice(search + 1))) own.set(name, [...(own.get(name) ?? []), value])
+    for (const [name, values] of own) {
+      query.set(name, values)
+      if (QUERY_NAME_CHANGES.test(name) || values.some((value) => QUERY_VALUE_CHANGES.test(value))) rewritten = true
+    }
+    // A browser keeps the fragment across a redirect that names none.
+    if (hash >= 0) fragment = next.slice(hash)
+    path = target
+  }
+  if (target === undefined || (rewritten && visited.size > 1)) return undefined
+  const merged = new URLSearchParams()
+  for (const [name, values] of query) for (const value of values) merged.append(name, value)
+  return target + (merged.size ? `?${merged}` : '') + fragment
+}
+
 function buildDocEntryFromPageId(pageId: string, indexedFrontmatter?: FrontmatterData): DocEntry {
   const fm = indexedFrontmatter ?? readFrontmatter(pageId)
   const slug = pageId === 'introduction' ? [] : pageId.split('/').filter(Boolean)
@@ -687,8 +823,8 @@ let _allEntries: Array<DocEntry> | null = null
 // ---------------------------------------------------------------------------
 
 /**
- * A page whose `openapi:` frontmatter resolves only to hidden or excluded
- * operations 404s (see the docs page route), so no listing may offer it. The
+ * A page whose `openapi:` frontmatter resolves only to excluded operations
+ * 404s (see the docs page route), so no listing may offer it. The
  * build decides this with the route's own lookup, spec prefixes included, and
  * records the withheld page ids (see `UNPUBLISHED_PAGES_FILE`). Self-hosted
  * builds read that record synchronously from the embedded sources, so the
@@ -719,7 +855,7 @@ function recordedUnpublishedPages(): ReadonlySet<string> {
 }
 
 /**
- * False for a page whose documented operation is hidden or excluded. A
+ * False for a page whose documented operation is excluded. A
  * secondary-locale route renders its own translation when one exists (the
  * build records it as `<locale>/<id>`) and the primary page otherwise, so
  * `locale` judges the file that route would render.
@@ -1081,16 +1217,19 @@ function resolveNavItem(
   groupPath?: Array<string>,
 ): NavigationItem {
   const fm = readFrontmatter(pageId, locale)
+  const api = pageApiMetadata(fm)
+  const method = api.openapi ? (api.openapi.webhook ? 'HOOK' : api.openapi.method.toUpperCase()) : api.manual?.method
   const slug = pageId === 'introduction' ? [] : pageId.split('/').filter(Boolean)
   const baseHref = slug.length ? `/${slug.join('/')}` : '/'
-  const operation = pageApiMetadata(fm).openapi
   const href = servedRootHref(locale ? (baseHref === '/' ? `/${locale}` : `/${locale}${baseHref}`) : baseHref)
+  const redirectTo = redirectedHref(href)
   return {
     id: slugifyId(pageId) || 'introduction',
     title: fm.navTitle ?? fm.title ?? deriveTitleFromSlug(pageId),
+    ...(method ? { method } : {}),
     href,
+    ...(redirectTo ? { redirectTo } : {}),
     badge: fm.badge,
-    ...(operation ? { method: operation.webhook ? 'HOOK' : operation.method.toUpperCase() } : {}),
     ...(typeof fm.icon === 'string' && fm.icon ? { icon: fm.icon } : {}),
     ...(fm.iconType ? { iconType: fm.iconType } : {}),
     description: fm.description,
@@ -1107,11 +1246,12 @@ function buildNavigationGroup(
   ancestors: Array<string> = [],
   locale: string | undefined,
   isVisible: PageVisibility,
+  hiddenItems: Array<NavigationItem>,
 ): NavigationGroup | null {
   if (group.hidden) return null
 
   const groupPath = [...ancestors, group.group].filter(Boolean)
-  const nodes = buildNavigationNodes(group.pages, indexPath, groupPath, locale, isVisible)
+  const nodes = buildNavigationNodes(group.pages, indexPath, groupPath, locale, isVisible, hiddenItems)
   if (nodes.length === 0) return null
 
   return {
@@ -1129,18 +1269,21 @@ function buildNavigationNodes(
   ancestors: Array<string>,
   locale: string | undefined,
   isVisible: PageVisibility,
+  hiddenItems: Array<NavigationItem>,
 ): Array<NavigationNode> {
   return pages.flatMap<NavigationNode>((page, index) => {
     if (typeof page === 'string') {
-      // Fern and some legacy docs configs list pages that are reachable by
-      // direct link but explicitly hidden from the rendered sidebar.
-      if (readFrontmatter(page, locale).hidden) return []
       if (!isDocPublished(page, locale)) return []
       // A page the reader may not open must not leak its title either.
       if (!isVisible(page, locale)) return []
-      return [{ type: 'page', item: resolveNavItem(page, locale, ancestors) }]
+      const item = resolveNavItem(page, locale, ancestors)
+      // Fern, Mintlify and some legacy docs configs list pages that are
+      // reachable by direct link but hidden from the rendered sidebar. The tab
+      // that lists one still owns it.
+      if (readFrontmatter(page, locale).hidden) { hiddenItems.push(item); return [] }
+      return [{ type: 'page', item }]
     }
-    const child = buildNavigationGroup(page, [...indexPath, index], ancestors, locale, isVisible)
+    const child = buildNavigationGroup(page, [...indexPath, index], ancestors, locale, isVisible, hiddenItems)
     return child ? [{ type: 'group', group: child }] : []
   })
 }
@@ -1182,8 +1325,9 @@ export function getSidebarCollections(locale?: string, reader: ReaderContext = A
     .map((tab) => {
       const id = tabCollectionId(tab.tab)
       const groups = tab.groups ?? []
+      const hiddenItems: Array<NavigationItem> = []
       const groupSections = groups.flatMap((group, index) => {
-        const tree = buildNavigationGroup(group, [index], [], locale, isVisible)
+        const tree = buildNavigationGroup(group, [index], [], locale, isVisible, hiddenItems)
         if (!tree) return []
         return [{
           id: tree.id,
@@ -1197,7 +1341,7 @@ export function getSidebarCollections(locale?: string, reader: ReaderContext = A
         }]
       })
       const rootNodes = tab.pages
-        ? buildNavigationNodes(tab.pages, [groups.length], [], locale, isVisible)
+        ? buildNavigationNodes(tab.pages, [groups.length], [], locale, isVisible, hiddenItems)
         : []
       const sections = [
         ...(rootNodes.length > 0 ? [{
@@ -1216,6 +1360,7 @@ export function getSidebarCollections(locale?: string, reader: ReaderContext = A
         description: tab.description,
         icon: tab.icon,
         sections,
+        ...(hiddenItems.length > 0 ? { hiddenItems } : {}),
         href: tab.href,
         api: tab.api,
       }
@@ -1310,33 +1455,43 @@ function navigationGroupParts(section: NavigationSection, item: NavigationItem):
   return section.id?.startsWith('nav-root-') ? [] : [section.title]
 }
 
-export function getBreadcrumbs(currentHref: string, reader: ReaderContext = ANONYMOUS_READER): Array<BreadcrumbItem> {
-  const collections = getSidebarCollections(navigationLocaleForHref(currentHref), reader)
-
+/**
+ * The tab, authored group path and entry that own `href`: the first tab that
+ * lists it in its sidebar. A page its frontmatter hides is not listed there,
+ * but the tab that lists it in navigation still owns it.
+ */
+function findNavigationOwner(collections: Array<SidebarCollection>, href: string) {
   for (const collection of collections) {
     for (const section of collection.sections) {
-      const match = section.items.find((item) => item.href === currentHref)
-      if (match) {
-        const crumbs: Array<BreadcrumbItem> = []
-        // Tab level
-        const firstPageHref = collection.sections[0]?.items[0]?.href
-        crumbs.push({ label: collection.label, href: firstPageHref })
-        // Group level follows the authored recursive path without flattening
-        // those groups into duplicate visual sections.
-        // A group named after its tab (e.g. "Get started" › "Get started")
-        // would stutter — collapse consecutive duplicate labels.
-        const groupParts = navigationGroupParts(section, match)
-        for (const part of groupParts) {
-          if (crumbs[crumbs.length - 1]?.label !== part) crumbs.push({ label: part })
-        }
-        // Current page
-        crumbs.push({ label: match.title })
-        return crumbs
-      }
+      const item = section.items.find((candidate) => candidate.href === href)
+      if (item) return { collection, item, groupPath: navigationGroupParts(section, item) }
     }
   }
+  for (const collection of collections) {
+    const item = collection.hiddenItems?.find((candidate) => candidate.href === href)
+    if (item) return { collection, item, groupPath: item.groupPath ?? [] }
+  }
+  return undefined
+}
 
-  return []
+export function getBreadcrumbs(currentHref: string, reader: ReaderContext = ANONYMOUS_READER): Array<BreadcrumbItem> {
+  const owner = findNavigationOwner(getSidebarCollections(navigationLocaleForHref(currentHref), reader), currentHref)
+  if (!owner) return []
+
+  const crumbs: Array<BreadcrumbItem> = []
+  // Tab level
+  const firstPageHref = owner.collection.sections[0]?.items[0]?.href
+  crumbs.push({ label: owner.collection.label, href: firstPageHref })
+  // Group level follows the authored recursive path without flattening
+  // those groups into duplicate visual sections.
+  // A group named after its tab (e.g. "Get started" › "Get started")
+  // would stutter — collapse consecutive duplicate labels.
+  for (const part of owner.groupPath) {
+    if (crumbs[crumbs.length - 1]?.label !== part) crumbs.push({ label: part })
+  }
+  // Current page
+  crumbs.push({ label: owner.item.title })
+  return crumbs
 }
 
 /**
@@ -1353,13 +1508,7 @@ export function getNavCategory(currentHref: string, reader: ReaderContext = ANON
 
 /** Every authored group above the page, outermost first; empty outside any group. */
 export function getNavGroupPath(currentHref: string, reader: ReaderContext = ANONYMOUS_READER): Array<string> {
-  for (const collection of getSidebarCollections(navigationLocaleForHref(currentHref), reader)) {
-    for (const section of collection.sections) {
-      const item = section.items.find((candidate) => candidate.href === currentHref)
-      if (item) return [...navigationGroupParts(section, item)]
-    }
-  }
-  return []
+  return [...(findNavigationOwner(getSidebarCollections(navigationLocaleForHref(currentHref), reader), currentHref)?.groupPath ?? [])]
 }
 
 // ---------------------------------------------------------------------------
@@ -1386,22 +1535,10 @@ export function getNavContext(pageId: string, locale?: string, reader: ReaderCon
   const breadcrumb = getBreadcrumbs(href, reader)
 
   // Find which tab and group this page belongs to
-  const collections = getSidebarCollections(locale, reader)
-  let tabName = ''
-  let groupPath: Array<string> = []
+  const owner = findNavigationOwner(getSidebarCollections(locale, reader), href)
+  const groupPath = [...(owner?.groupPath ?? [])]
 
-  outer: for (const collection of collections) {
-    for (const section of collection.sections) {
-      const item = section.items.find((candidate) => candidate.href === href)
-      if (item) {
-        tabName = collection.label
-        groupPath = [...navigationGroupParts(section, item)]
-        break outer
-      }
-    }
-  }
-
-  return { tab: tabName, group: groupPath.at(-1) ?? '', groupPath, prev, next, breadcrumb }
+  return { tab: owner?.collection.label ?? '', group: groupPath.at(-1) ?? '', groupPath, prev, next, breadcrumb }
 }
 
 /** Async managed-release twin of {@link getNavContext}. */
@@ -1556,6 +1693,11 @@ export function getFontsConfig(): DocsJsonFonts {
 
 export function getRedirectsConfig(): Array<DocsJsonRedirect> {
   return docsConfig().redirects ?? []
+}
+
+/** Whether docs.json sets `errors.404.redirect`: an address with no page goes to the home page instead of the 404 page. */
+export function getNotFoundRedirect(): boolean {
+  return docsConfig().errors?.['404']?.redirect === true
 }
 
 /** Raw, unvalidated `integrations` block; callers must run it through `resolveAnalyticsConfig`. */

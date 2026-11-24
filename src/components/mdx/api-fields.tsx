@@ -8,9 +8,10 @@
 
 'use client'
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { useApiLabels } from '@/components/api/api-locale'
+import { useParameterLink } from '@/components/api/parameter-link'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
 
@@ -28,6 +29,8 @@ const descriptionClass =
 // ---------------------------------------------------------------------------
 
 interface ResponseFieldProps {
+  /** Set by the page's heading pass, so a link to the field lands on it. */
+  id?: string
   name: string
   type?: string
   required?: boolean
@@ -39,6 +42,7 @@ interface ResponseFieldProps {
 }
 
 export function ResponseField({
+  id,
   name,
   type,
   required,
@@ -49,19 +53,20 @@ export function ResponseField({
   children,
 }: ResponseFieldProps) {
   const t = useApiLabels()
+  const { active, ...linkEvents } = useParameterLink(name)
   return (
-    <section className="border-b border-border/70 py-5 last:border-0">
-      <div className="not-prose flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
+    <section {...linkEvents} tabIndex={0} data-p={name} data-highlighted={active || undefined} className="thally-parameter">
+      <div id={id} className="thally-parameter-header not-prose">
         {pre.map((label) => <span key={`pre-${label}`} className="rounded bg-muted px-1.5 py-0.5 text-[0.68rem] font-medium text-foreground/60">{label}</span>)}
         <code className={cn('text-sm font-semibold text-foreground', deprecated && 'line-through opacity-65')}>{name}</code>
         {post.map((label) => <span key={`post-${label}`} className="rounded bg-muted px-1.5 py-0.5 text-[0.68rem] font-medium text-foreground/60">{label}</span>)}
         {type && (
-          <span className="rounded border border-border/50 bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground/70">
+          <span className="thally-parameter-type">
             {type}
           </span>
         )}
         {required && (
-          <span className="text-[0.7rem] font-semibold text-rose-600 dark:text-rose-400">
+          <span className="thally-parameter-required">
             {t('required')}
           </span>
         )}
@@ -84,6 +89,8 @@ export function ResponseField({
 // ---------------------------------------------------------------------------
 
 interface ParamFieldProps {
+  /** Set by the page's heading pass, so a link to the field lands on it. */
+  id?: string
   body?: boolean | string
   query?: boolean | string
   path?: boolean | string
@@ -97,26 +104,27 @@ interface ParamFieldProps {
   children?: ReactNode
 }
 
-export function ParamField({ name, type, required, deprecated, body, query, path, header, default: defaultValue, placeholder, children }: ParamFieldProps) {
+export function ParamField({ id, name, type, required, deprecated, body, query, path, header, default: defaultValue, placeholder, children }: ParamFieldProps) {
   const t = useApiLabels()
   // As on Mintlify, only a header names its location; body, query and path fields show name, type and required.
   const isHeader = !path && !query && Boolean(header)
   const locatedName = [path, query, header, body].find((value): value is string => typeof value === 'string' && value.length > 0)
   const fieldName = locatedName ?? name ?? 'parameter'
+  const { active, ...linkEvents } = useParameterLink(fieldName)
   return (
-    <section className="border-b border-border/70 py-5 last:border-0">
-      <div className="not-prose flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
+    <section {...linkEvents} tabIndex={0} data-p={fieldName} data-highlighted={active || undefined} className="thally-parameter">
+      <div id={id} className="thally-parameter-header not-prose">
         <code className={cn('text-sm font-semibold text-foreground', deprecated && 'line-through opacity-65')}>{fieldName}</code>
         {isHeader && (
-          <span className="font-mono text-[0.7rem] font-medium text-green-700 dark:text-green-300">header</span>
+          <span className="thally-parameter-location font-mono text-[0.7rem] font-medium text-green-700 dark:text-green-300">header</span>
         )}
         {type && (
-          <span className="rounded border border-border/50 bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground/70">
+          <span className="thally-parameter-type">
             {type}
           </span>
         )}
         {required && (
-          <span className="text-[0.7rem] font-semibold text-rose-600 dark:text-rose-400">
+          <span className="thally-parameter-required">
             {t('required')}
           </span>
         )}
@@ -142,13 +150,51 @@ export function ParamField({ name, type, required, deprecated, body, query, path
 interface ExpandableProps {
   title?: string
   defaultOpen?: boolean
+  /** Mounts the children on first open, so a large generated schema is not in the page until asked for. */
+  lazy?: boolean
+  /** With `lazy`: the id prefix of the fields inside; a link to one of them opens this, as it cannot be found in the DOM. */
+  anchor?: string
   children?: ReactNode
 }
 
-export function Expandable({ title, defaultOpen = false, children }: ExpandableProps) {
+export function Expandable({ title, defaultOpen = false, lazy = false, anchor, children }: ExpandableProps) {
   const t = useApiLabels()
   const [open, setOpen] = useState(defaultOpen)
+  const [mounted, setMounted] = useState(defaultOpen)
+  if (open && !mounted) setMounted(true)
   const contentId = useId()
+  const content = useRef<HTMLDivElement>(null)
+  const target = useRef<string | null>(null)
+  // A link to a field inside a collapsed Expandable opens it, as the <details> Mintlify renders does.
+  useEffect(() => {
+    const reveal = () => {
+      let id: string
+      try { id = decodeURIComponent(window.location.hash.slice(1)) } catch { return }
+      if (!id || !content.current?.hidden) return
+      const element = document.getElementById(id)
+      // A lazy field is not in the DOM until opened: its id says whose it is. Rows below it are mounted as their own Expandables open.
+      const inside = element ? content.current.contains(element) : lazy && anchor !== undefined && id.startsWith(`${anchor}-`)
+      if (!inside) return
+      target.current = id
+      setOpen(true)
+    }
+    reveal()
+    // A hash may first select a lazy API union branch. Its field does not exist until that branch mounts, after this effect.
+    const observer = new MutationObserver(reveal)
+    if (content.current) observer.observe(content.current, { childList: true, subtree: true })
+    window.addEventListener('hashchange', reveal)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('hashchange', reveal)
+    }
+  }, [lazy, anchor])
+  // The browser could not scroll to a hidden field when the page loaded; once it has a box, go there.
+  useEffect(() => {
+    const element = open && target.current ? document.getElementById(target.current) : null
+    if (!element || element.closest('[hidden]')) return
+    element.scrollIntoView()
+    target.current = null
+  }, [open])
   return (
     <div className="my-3">
       <button
@@ -162,11 +208,12 @@ export function Expandable({ title, defaultOpen = false, children }: ExpandableP
         {title ?? t('showChildAttributes')}
       </button>
       <div
+        ref={content}
         id={contentId}
         hidden={!open}
         className="mt-3 border-l border-border pl-4"
       >
-        {children}
+        {lazy && !mounted ? null : children}
       </div>
     </div>
   )
